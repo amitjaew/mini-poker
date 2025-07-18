@@ -1,0 +1,11 @@
+[package]
+name = "mini-poker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.8.4", features = ['ws'] }
+futures-util = "0.3.31"
+rand = "0.9.1"
+tokio = { version = "1.46.1", features = ['sync', 'macros', 'rt-multi-thread'] }
+uuid = { version = "1.17.0", features = ['v4'] }
