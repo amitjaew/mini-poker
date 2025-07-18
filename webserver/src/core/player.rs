@@ -1,4 +1,5 @@
 use tokio::sync::{ mpsc, Mutex };
+use tokio::time::{timeout, Duration};
 use tokio;
 use uuid;
 use axum::extract::ws::{ WebSocket, Message };
@@ -61,8 +62,11 @@ async fn player_message_recv_loop(
 ) {
     loop {
         if !*active.lock().await { break; }
-        match receiver.recv().await {
-            Some(message) => {
+        const REFRESH_TIMEOUT: u64 = 1;
+        let result = timeout(Duration::from_secs(REFRESH_TIMEOUT), receiver.recv()).await;
+
+        match result {
+            Ok(Some(message)) => {
                 match message {
                     PlayerMessage::GameRoomPayload { content } => {
                         println!("Player {} receives {}", player_id, content);
@@ -75,9 +79,13 @@ async fn player_message_recv_loop(
                     }
                 }
             },
-            None => {
+            Ok(None) => {
                 eprintln!("Player {} connection closed", player_id);
                 *active.lock().await = false;
+            },
+            Err(_) => {
+                println!("Player {}: No message received within {} seconds", player_id, REFRESH_TIMEOUT);
+                continue; // continue the loop
             }
         }
     }
@@ -92,27 +100,38 @@ async fn player_socket_recv_loop(
     active: Arc<Mutex<bool>>
 ) {
     loop {
-        {
-            if !*active.lock().await { break; }
-        }
-        let sock_msg_attempt = socket_receiver.next().await;
+        if !*active.lock().await { break; }
 
-        if let Some(Ok(msg)) = sock_msg_attempt {
-            match msg.to_text() {
-                Ok(message) => {
-                    println!("Player {} sent message: {}", player_id, message);
-                    let payload = GameRoomMessage::PlayerPayload { 
-                        content: message.to_string(),
-                        from: player_id
-                    };
-                    let _ = sender.send(payload).await;
-                },
-                Err(err) => eprintln!("Invalid text message: {}", err),
+        const REFRESH_TIMEOUT: u64 = 1;
+        let result = timeout(Duration::from_secs(REFRESH_TIMEOUT), socket_receiver.next()).await;
+
+        match result {
+            Ok(Some(Ok(message_unparsed))) => {
+                match message_unparsed.to_text() {
+                    Ok(message) => {
+                        println!("Player {} sent message: {}", player_id, message);
+                        let payload = GameRoomMessage::PlayerPayload { 
+                            content: message.to_string(),
+                            from: player_id
+                        };
+                        let _ = sender.send(payload).await;
+                    },
+                    Err(err) => {
+                        eprintln!("Invalid text message: {}", err);
+                    }
+                }
+            },
+            Ok(Some(Err(err))) => {
+                eprintln!("Player inbound socket error: {}", err);
+            },
+            Ok(None) => {
+                
+            },
+            Err(err) => {
+            
             }
         }
-        else if let Some(Err(err)) = sock_msg_attempt {
-            eprintln!("Player inbound socket error: {}", err);
-            break;
-        }
     }
+
+    println!("Closing socket inbound loop for player {}", player_id);
 }

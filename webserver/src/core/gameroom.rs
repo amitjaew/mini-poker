@@ -5,7 +5,7 @@ use axum::extract::ws::WebSocket;
 use std::sync::Arc;
 use crate::core::player::{ PlayerMessage, Player };
 
-
+#[derive(Clone)]
 struct GameRoomPlayer {
     id: uuid::Uuid,
     sender: mpsc::Sender<PlayerMessage>,
@@ -19,6 +19,7 @@ struct GameRoom {
 struct GameRoomState {
     step: u32
 }
+#[derive(Clone)]
 struct GameRoomPlayerState {
     is_active: bool
 }
@@ -73,16 +74,24 @@ async fn gameroom_state_loop(gameroom: Arc<Mutex<GameRoom>>) {
         {
             let mut gameroom_guard = gameroom.lock().await;
             gameroom_guard.state.step += 1; // JUST FOR DEBUGGING
-            
+            let mut removed_players = Vec::new();
+
             for player in gameroom_guard.players.iter() {
                 match player.sender.clone().send(PlayerMessage::GameRoomPayload { content: 123 }).await {
                     Ok(_) => println!("Message sent to player {}", player.id),
                     Err(err) => eprintln!("FAILED to send to {}: {}", player.id, err),
                 }
-
+                let _ = player.sender.send(PlayerMessage::TerminateSession).await;
+                removed_players.push(player.clone());
             }
             //println!("state: {}", gameroom_guard.state.step);
+            //
+
+            for player in removed_players {
+                gameroom_guard.players.retain(|val| val.id != player.id);
+            }
         }
+
 
         tokio::time::sleep(tokio::time::Duration::new(1, 0)).await;
     }

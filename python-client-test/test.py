@@ -12,8 +12,9 @@ async def test_client():
             print("Message sent.")
 
             # Wait for a response (optional)
-            response = await websocket.recv()
-            print(f"Received from server: {response}")
+            while True:
+                response = await websocket.recv()
+                print(f"Received from server: {response}")
 
     except Exception as e:
         print(f"Connection failed: {e}")
