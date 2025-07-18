@@ -61,29 +61,28 @@ async fn player_message_recv_loop(
 ) {
     loop {
         if !*active.lock().await { break; }
-        match receiver.try_recv() {
-            Ok(message) => {
+        match receiver.recv().await {
+            Some(message) => {
                 match message {
                     PlayerMessage::GameRoomPayload { content } => {
                         println!("Player {} receives {}", player_id, content);
                         let message = Message::text(format!("message: {}", content));
                         let _ = socket_sender.send(message).await;
                     },
-                    PlayerMessage::TerminateSession => *active.lock().await = false
-                }
-            },
-            Err(err) => {
-                match err {
-                    mpsc::error::TryRecvError::Empty => {},
-                    mpsc::error::TryRecvError::Disconnected => {
-                        eprintln!("Player {} connection closed", player_id);
-                        *active.lock().await = false;
+                    PlayerMessage::TerminateSession => {
+                        println!("Player {} eceived Terminate Session Message", player_id);
+                        *active.lock().await = false
                     }
                 }
+            },
+            None => {
+                eprintln!("Player {} connection closed", player_id);
+                *active.lock().await = false;
             }
         }
     }
-
+    
+    println!("Closing recv loop for player: {}", player_id);
 }
 
 async fn player_socket_recv_loop(
@@ -93,7 +92,9 @@ async fn player_socket_recv_loop(
     active: Arc<Mutex<bool>>
 ) {
     loop {
-        if !*active.lock().await { break; }
+        {
+            if !*active.lock().await { break; }
+        }
         let sock_msg_attempt = socket_receiver.next().await;
 
         if let Some(Ok(msg)) = sock_msg_attempt {

@@ -65,28 +65,23 @@ async fn gameroom_message_loop(
     mut receiver: mpsc::Receiver<GameRoomMessage>
 ) {
     while let Some(message) = receiver.recv().await {
-        println!("2");
         gameroom.lock().await.handle_gameroom_message(message).await;
     }
 }
 async fn gameroom_state_loop(gameroom: Arc<Mutex<GameRoom>>) {
     loop {
         {
-            println!("1");
             let mut gameroom_guard = gameroom.lock().await;
             gameroom_guard.state.step += 1; // JUST FOR DEBUGGING
-            if gameroom_guard.players.len() > 0 {
-                let _ = gameroom_guard.players[0].sender
-                    .send(
-                    PlayerMessage::GameRoomPayload { content: 123 }
-                );
-            }
-
+            
             for player in gameroom_guard.players.iter() {
-                println!("should send to: {}", player.id);
-                let _ = player.sender.clone().send(PlayerMessage::GameRoomPayload { content: 123 });
+                match player.sender.clone().send(PlayerMessage::GameRoomPayload { content: 123 }).await {
+                    Ok(_) => println!("Message sent to player {}", player.id),
+                    Err(err) => eprintln!("FAILED to send to {}: {}", player.id, err),
+                }
+
             }
-            println!("state: {}", gameroom_guard.state.step);
+            //println!("state: {}", gameroom_guard.state.step);
         }
 
         tokio::time::sleep(tokio::time::Duration::new(1, 0)).await;
