@@ -4,6 +4,9 @@ use uuid;
 use axum::extract::ws::WebSocket;
 use std::sync::Arc;
 use crate::core::player::{ PlayerMessage, Player };
+use crate::core::card::{ Card, Rank, Suit, DECK };
+use rand::Rng;
+use rand::rngs::ThreadRng;
 
 #[derive(Clone)]
 struct GameRoomPlayer {
@@ -14,10 +17,11 @@ struct GameRoomPlayer {
 struct GameRoom {
     //id: uuid::Uuid, // (unneeded for now)
     players: Vec<GameRoomPlayer>,
-    state: GameRoomState
+    state: GameRoomState,
 }
 struct GameRoomState {
-    step: u32
+    step: u32,
+    deck: [Card; 52]
 }
 #[derive(Clone)]
 struct GameRoomPlayerState {
@@ -31,12 +35,16 @@ pub enum GameRoomMessage {
 impl GameRoom {
     fn new() -> Self {
         let players = Vec::new();
-        let state = GameRoomState { step: 0 };
+        let state = GameRoomState {
+            step: 0,
+            deck: DECK,
+        };
 
         Self {
             // id: uuid::Uuid::new_v4(), //(unneeded for now)
             players,
-            state
+            state,
+            //rng: rand::rng()
         }
     }
     async fn handle_gameroom_message(&mut self, message: GameRoomMessage) {
@@ -60,6 +68,59 @@ impl GameRoom {
         }
     }
 }
+
+enum PokerStep {
+    Blind,
+    PreFlop,
+    Flop,
+    Turn,
+    River,
+    Showdown,
+    BettingRound
+}
+
+fn handle_poker_step(
+    step: PokerStep,
+    gameroom_state:GameRoomState,
+    players:Vec<GameRoomPlayer>
+) {
+    match step {
+        PokerStep::Blind => {
+            
+        },
+        PokerStep::PreFlop => {
+            
+        },
+        PokerStep::Flop => {
+            
+        },
+        PokerStep::Turn => {
+            
+        },
+        PokerStep::River => {
+            
+        },
+        PokerStep::Showdown => {
+            
+        },
+        PokerStep::BettingRound => {
+            
+        }
+    }
+}
+
+const STANDARD_POKER_STEPS: [PokerStep; 10] = [
+    PokerStep::Blind,
+    PokerStep::PreFlop,
+    PokerStep::BettingRound,
+    PokerStep::Flop,
+    PokerStep::BettingRound,
+    PokerStep::Turn,
+    PokerStep::BettingRound,
+    PokerStep::River,
+    PokerStep::BettingRound,
+    PokerStep::Showdown
+];
 
 async fn gameroom_message_loop(
     gameroom: Arc<Mutex<GameRoom>>,
@@ -85,13 +146,11 @@ async fn gameroom_state_loop(gameroom: Arc<Mutex<GameRoom>>) {
                 removed_players.push(player.clone());
             }
             //println!("state: {}", gameroom_guard.state.step);
-            //
 
             for player in removed_players {
                 gameroom_guard.players.retain(|val| val.id != player.id);
             }
         }
-
 
         tokio::time::sleep(tokio::time::Duration::new(1, 0)).await;
     }

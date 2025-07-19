@@ -17,6 +17,21 @@ pub enum Rank {
     King,
     Ace
 }
+pub const CARD_RANKS: [Rank; 13] = [
+    Rank::Two,
+    Rank::Three,
+    Rank::Four,
+    Rank::Five,
+    Rank::Six,
+    Rank::Seven,
+    Rank::Eight,
+    Rank::Nine,
+    Rank::Ten,
+    Rank::Jack,
+    Rank::Queen,
+    Rank::King,
+    Rank::Ace
+];
 
 impl Display for Rank {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -38,6 +53,25 @@ impl Display for Rank {
     }
 }
 
+pub const fn build_deck() -> [Card; 52] {
+    let mut deck = [Card { rank: Rank::Two, suit: Suit::Clubs, owner: Owner::Community }; 52];
+    let mut i = 0;
+    let mut suit_index = 0;
+    while suit_index < 4 {
+        let suit = CARD_SUITS[suit_index];
+        let mut rank_index = 0;
+        while rank_index < 13 {
+            let rank = CARD_RANKS[rank_index];
+            deck[i] = Card { rank, suit, owner: Owner::Community };
+            i += 1;
+            rank_index += 1;
+        }
+        suit_index += 1;
+    }
+    deck
+}
+
+pub const DECK: [Card; 52] = build_deck();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Suit {
@@ -46,6 +80,12 @@ pub enum Suit {
     Hearts,
     Spades
 }
+pub const CARD_SUITS: [Suit; 4] = [
+    Suit::Clubs,
+    Suit::Diamonds,
+    Suit::Hearts,
+    Suit::Spades
+];
 
 impl Display for Suit {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
