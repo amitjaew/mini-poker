@@ -5,27 +5,43 @@ use axum::extract::ws::WebSocket;
 use std::sync::Arc;
 use crate::core::player::{ PlayerMessage, Player };
 use crate::core::card::{ Card, Rank, Suit, DECK };
-use rand::Rng;
-use rand::rngs::ThreadRng;
+use rand;
+use rand::seq::SliceRandom;
 
 #[derive(Clone)]
 struct GameRoomPlayer {
     id: uuid::Uuid,
     sender: mpsc::Sender<PlayerMessage>,
-    state: GameRoomPlayerState
+    state: GameRoomPlayerState,
 }
 struct GameRoom {
-    //id: uuid::Uuid, // (unneeded for now)
     players: Vec<GameRoomPlayer>,
     state: GameRoomState,
 }
 struct GameRoomState {
     step: u32,
-    deck: [Card; 52]
+    deck: [Card; 52],
+    turn_timer: u16,
+    turn_duration: u16,
+    community_cards: Vec<Card>,
+    current_blind_idx: u8,
+    dealt_card_offset: usize,
+    current_bet_base: u32
 }
 #[derive(Clone)]
 struct GameRoomPlayerState {
-    is_active: bool
+    is_active: bool,
+    dealt_cards: Vec<Card>,
+    current_bet: u32,
+    action: PlayerGameAction
+}
+#[derive(Clone)]
+enum PlayerGameAction {
+    None,
+    Fold,
+    Check,
+    Call,
+    Raise(u32)
 }
 pub enum GameRoomMessage {
     PlayerPayload { content: String, from: uuid::Uuid },
@@ -38,6 +54,12 @@ impl GameRoom {
         let state = GameRoomState {
             step: 0,
             deck: DECK,
+            community_cards: Vec::new(),
+            current_blind_idx: 0,
+            turn_timer: 0,
+            turn_duration: 60,
+            dealt_card_offset: 0,
+            current_bet_base: 0
         };
 
         Self {
@@ -55,7 +77,10 @@ impl GameRoom {
                         id,
                         sender,
                         state: GameRoomPlayerState { 
-                            is_active: false
+                            is_active: false,
+                            dealt_cards: Vec::new(),
+                            current_bet: 0,
+                            action: PlayerGameAction::None
                         }
                     }
                 );
@@ -79,32 +104,121 @@ enum PokerStep {
     BettingRound
 }
 
-fn handle_poker_step(
+async fn handle_poker_step(
     step: PokerStep,
-    gameroom_state:GameRoomState,
-    players:Vec<GameRoomPlayer>
+    mut gameroom_state:GameRoomState,
+    mut players:Vec<GameRoomPlayer>
 ) {
+    for player in players.iter_mut() {
+        player.state.action = PlayerGameAction::None;
+    }
     match step {
         PokerStep::Blind => {
-            
+            let mut rng = rand::rng();
+            gameroom_state.deck.shuffle(&mut rng);
+            gameroom_state.community_cards.clear();
+
+            for player in players.iter_mut() {
+                player.state.is_active = true;
+                player.state.dealt_cards.clear();
+            }
+
+            let n_players = players.iter().len() as u8;
+            let small_blind = gameroom_state.current_blind_idx % n_players as u8;
+            let big_blind = (small_blind + 1) % n_players as u8;
+
+            gameroom_state.current_blind_idx = big_blind;
         },
         PokerStep::PreFlop => {
-            
+            gameroom_state.dealt_card_offset = 0;
+
+            for player in players.iter_mut() {
+                if !player.state.is_active { continue; }
+
+                player.state.dealt_cards.push(
+                    gameroom_state.deck[gameroom_state.dealt_card_offset]
+                );
+                player.state.dealt_cards.push(
+                    gameroom_state.deck[gameroom_state.dealt_card_offset + 1]
+                );
+                gameroom_state.dealt_card_offset += 2;
+            }
         },
         PokerStep::Flop => {
-            
+            gameroom_state.community_cards.push(
+                    gameroom_state.deck[gameroom_state.dealt_card_offset]
+            );
+            gameroom_state.community_cards.push(
+                    gameroom_state.deck[gameroom_state.dealt_card_offset + 1]
+            );
+            gameroom_state.community_cards.push(
+                    gameroom_state.deck[gameroom_state.dealt_card_offset + 2]
+            );
+            gameroom_state.dealt_card_offset += 3;
         },
         PokerStep::Turn => {
-            
+            gameroom_state.community_cards.push(
+                    gameroom_state.deck[gameroom_state.dealt_card_offset]
+            );
+            gameroom_state.dealt_card_offset += 1;
         },
         PokerStep::River => {
+            gameroom_state.community_cards.push(
+                    gameroom_state.deck[gameroom_state.dealt_card_offset]
+            );
+            gameroom_state.dealt_card_offset += 1;
             
         },
         PokerStep::Showdown => {
             
         },
         PokerStep::BettingRound => {
-            
+            loop {
+                for player in players.iter_mut() {
+                    if !player.state.is_active { continue; }
+                    
+                    let mut turn_timer = gameroom_state.turn_duration;
+                    while turn_timer > 0 {
+                        turn_timer -= 1;
+
+                        match player.state.action {
+                            PlayerGameAction::None => { },
+                            PlayerGameAction::Fold => { 
+                                player.state.is_active = false;
+                                break;
+                            },
+                            PlayerGameAction::Call => {
+                                player.state.current_bet = gameroom_state.current_bet_base;
+                                break;
+                            },
+                            PlayerGameAction::Check => {
+                                if player.state.current_bet == gameroom_state.current_bet_base {
+                                    break;
+                                }
+                                else if player.state.current_bet > gameroom_state.current_bet_base {
+                                    gameroom_state.current_bet_base = player.state.current_bet;
+                                }
+                            },
+                            PlayerGameAction::Raise(raise) => {
+                                gameroom_state.current_bet_base += raise;
+                                player.state.current_bet += raise;
+                                break;
+                            }
+                        }
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    }
+
+                    if player.state.current_bet < gameroom_state.current_bet_base {
+                        player.state.is_active = false;
+                    }
+                }
+
+                let mut active_players = players.iter().filter(|player| player.state.is_active);
+                if
+                    active_players.clone().count() <= 1 ||
+                    active_players.all(|player| player.state.current_bet == gameroom_state.current_bet_base)
+                { break; }
+            }
         }
     }
 }
@@ -152,7 +266,7 @@ async fn gameroom_state_loop(gameroom: Arc<Mutex<GameRoom>>) {
             }
         }
 
-        tokio::time::sleep(tokio::time::Duration::new(1, 0)).await;
+        //tokio::time::sleep(tokio::time::Duration::new(1, 0)).await;
     }
 }
 
