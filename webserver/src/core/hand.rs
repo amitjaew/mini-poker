@@ -1,4 +1,5 @@
-use crate::core::card::{ Card, Rank };
+use crate::core::card::{ Card, Owner, Rank };
+use crate::core::combinations::omaha_hands;
 use crate::core::game::GameType;
 use std::cmp::{min, max};
 use std::fmt::{ Display, Formatter };
@@ -6,11 +7,12 @@ use std::result::Result;
 
 pub fn show_hand(hand: &[Card]) {
     for card in hand {
-        print!("{} {} / ", card.rank, card.suit);
+        print!("{}/ ", card);
     }
     print!("\n");
 }
 
+#[derive(Clone, Copy)]
 pub enum HandType {
     HighCard = 0,
     Pair,
@@ -69,27 +71,13 @@ fn get_straight(ranks: &Vec<u8>) -> Option<Vec<u8>> {
         for j in 0..4 { scale.push(3 - j); }
         return Some(scale);
     }
-    
+
     return None;
 }
 
-pub fn evaluate_hand(hand: &mut [Card], gametype: GameType) -> Result<(HandType, Vec<u8>), &'static str> {
+pub fn evaluate_hand(hand: &mut [Card]) -> Result<(HandType, Vec<u8>), &'static str> {
     hand.sort();
     hand.reverse();
-
-    match gametype {
-        GameType::TexasHoldemPoker => {
-            if hand.len() != 7 { return Err("Texas Holdem requires 7 cards"); }
-        },
-        GameType::OmahaPoker => {
-            if hand.len() != 10 { return Err("Omaha poker requires 10 cards"); }
-        }
-    }
-    /*
-     * TODO Manage Omaha Poker requirements:
-     *  Hand should be composed by 2 hole cards and 3 community cards
-     *  THIS SHIT REQUIRES REFACTORING :(
-     */
 
     let mut sorted_card_rank: Vec<u8> = Vec::with_capacity(5);
     for _ in 0..5 { sorted_card_rank.push(0); }
@@ -102,7 +90,7 @@ pub fn evaluate_hand(hand: &mut [Card], gametype: GameType) -> Result<(HandType,
     let mut is_two_pair = false;
     let mut is_pair = false;
     let mut suit_count = Vec::with_capacity(4);
-    
+
     let mut pair_rank: u8 = 0;
     let mut three_rank: u8 = 0;
 
@@ -111,7 +99,9 @@ pub fn evaluate_hand(hand: &mut [Card], gametype: GameType) -> Result<(HandType,
     // Flush check
     for i in 0..hand.len() {
         let card = hand[i];
-        if suit_count[card.suit as usize] == 4 {
+        suit_count[card.suit as usize] += 1;
+
+        if suit_count[card.suit as usize] == 5 {
             is_flush = true;
 
             let mut filtered_hand: Vec<u8>  = hand.iter()
@@ -130,7 +120,6 @@ pub fn evaluate_hand(hand: &mut [Card], gametype: GameType) -> Result<(HandType,
             }
             break;
         }
-        suit_count[card.suit as usize] += 1;
     }
 
     if is_flush && is_straight && sorted_card_rank[0] == Rank::Ace as u8 {
@@ -143,7 +132,7 @@ pub fn evaluate_hand(hand: &mut [Card], gametype: GameType) -> Result<(HandType,
     let mut card_count: Vec<u8> = Vec::with_capacity(13);
     for _ in 0..13 { card_count.push(0); }
     for i in 0..hand.len() { card_count[hand[i].rank as usize] += 1; }
-    
+
     for i in (0..card_count.len()).rev() {
         let count: u8 = card_count[i];
 
@@ -256,4 +245,15 @@ pub fn evaluate_hand(hand: &mut [Card], gametype: GameType) -> Result<(HandType,
         for i in 0..5 { sorted_card_rank[i] = temp[temp.len()-i-1]; }
         return Ok((HandType::HighCard, sorted_card_rank));
     }
+}
+
+pub fn evaluate_hand_omaha(hand: &mut [Card]) -> Result<(HandType, Vec<u8>), &'static str> {
+    let player_cards: Vec<Card> = hand.iter().filter(|c| c.owner == Owner::Player).cloned().collect();
+    let community_cards: Vec<Card> = hand.iter().filter(|c| c.owner == Owner::Community).cloned().collect();
+
+    omaha_hands(&player_cards, &community_cards)
+        .into_iter()
+        .filter_map(|mut five_card_hand| evaluate_hand(&mut five_card_hand).ok())
+        .max_by_key(|(hand_type, ranks)| (*hand_type as u8, ranks.clone()))
+        .ok_or("no valid hand found")
 }

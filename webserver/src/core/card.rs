@@ -1,5 +1,6 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, write};
 use std::cmp::Ordering ;
+use std::ops::Sub;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Rank {
@@ -109,8 +110,8 @@ pub enum Owner {
 impl Display for Owner {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Player => write!(f, "Player"),
-            Self::Community => write!(f, "Community")
+            Self::Player => write!(f, "[P]"),
+            Self::Community => write!(f, "[C]")
         }
     }
 }
@@ -128,8 +129,15 @@ impl Ord for Card {
     }
 }
 
+// May be reasonable to just implementt partial cmp at just card rank level
 impl PartialOrd for Card {
     fn partial_cmp(&self, other:&Self) -> Option<Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl Display for Card {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write(f, format_args!("{} {} {}", self.rank, self.suit, self.owner))
     }
 }
