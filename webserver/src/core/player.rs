@@ -2,7 +2,7 @@ use tokio::sync::{ mpsc, Mutex };
 use tokio::time::{timeout, Duration};
 use tokio;
 use uuid;
-use axum::extract::ws::{ WebSocket, Message };
+use axum::extract::ws::{ CloseFrame, Message, Utf8Bytes, WebSocket };
 use futures_util::{
    sink::SinkExt,
    stream::{ StreamExt, SplitSink, SplitStream }
@@ -48,7 +48,7 @@ impl Player {
         );
 
         Self {
-            id: uuid::Uuid::new_v4(),
+            id: id.clone(),
             active
         }
     }
@@ -69,13 +69,15 @@ async fn player_message_recv_loop(
             Ok(Some(message)) => {
                 match message {
                     PlayerMessage::GameRoomPayload { content } => {
-                        println!("Player {} receives {}", player_id, content);
+                        println!("Player {} received from server: {}", player_id, content);
                         let message = Message::text(format!("message: {}", content));
                         let _ = socket_sender.send(message).await;
                     },
                     PlayerMessage::TerminateSession => {
-                        println!("Player {} eceived Terminate Session Message", player_id);
-                        *active.lock().await = false
+                        println!("Player {} received: Terminate Session Message", player_id);
+
+                        let close_payload: CloseFrame = CloseFrame { code: 1000, reason: Utf8Bytes::from("closing") };
+                        let _ = socket_sender.send(Message::Close(Some(close_payload))).await;
                     }
                 }
             },
@@ -89,7 +91,7 @@ async fn player_message_recv_loop(
             }
         }
     }
-    
+
     println!("Closing recv loop for player: {}", player_id);
 }
 
@@ -110,7 +112,7 @@ async fn player_socket_recv_loop(
                 match message_unparsed.to_text() {
                     Ok(message) => {
                         println!("Player {} sent message: {}", player_id, message);
-                        let payload = GameRoomMessage::PlayerPayload { 
+                        let payload = GameRoomMessage::PlayerPayload {
                             content: message.to_string(),
                             from: player_id
                         };
@@ -125,10 +127,10 @@ async fn player_socket_recv_loop(
                 eprintln!("Player inbound socket error: {}", err);
             },
             Ok(None) => {
-                
+
             },
             Err(err) => {
-            
+
             }
         }
     }

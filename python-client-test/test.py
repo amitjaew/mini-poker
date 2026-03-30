@@ -1,5 +1,7 @@
 import asyncio
+
 import websockets
+from websockets.exceptions import ConnectionClosedOK
 
 
 async def test_client():
@@ -15,7 +17,12 @@ async def test_client():
             while True:
                 response = await websocket.recv()
                 print(f"Received from server: {response}")
+                if response == "close":
+                    await websocket.close()
+                    return
 
+    except ConnectionClosedOK as e:
+        print(f"Server closed connection: {e}")
     except Exception as e:
         print(f"Connection failed: {e}")
 

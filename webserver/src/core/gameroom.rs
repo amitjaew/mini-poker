@@ -76,7 +76,7 @@ impl GameRoom {
                     GameRoomPlayer{
                         id,
                         sender,
-                        state: GameRoomPlayerState { 
+                        state: GameRoomPlayerState {
                             is_active: false,
                             dealt_cards: Vec::new(),
                             current_bet: 0,
@@ -167,23 +167,23 @@ async fn handle_poker_step(
                     gameroom_state.deck[gameroom_state.dealt_card_offset]
             );
             gameroom_state.dealt_card_offset += 1;
-            
+
         },
         PokerStep::Showdown => {
-            
+
         },
         PokerStep::BettingRound => {
             loop {
                 for player in players.iter_mut() {
                     if !player.state.is_active { continue; }
-                    
+
                     let mut turn_timer = gameroom_state.turn_duration;
                     while turn_timer > 0 {
                         turn_timer -= 1;
 
                         match player.state.action {
                             PlayerGameAction::None => { },
-                            PlayerGameAction::Fold => { 
+                            PlayerGameAction::Fold => {
                                 player.state.is_active = false;
                                 break;
                             },
@@ -256,6 +256,7 @@ async fn gameroom_state_loop(gameroom: Arc<Mutex<GameRoom>>) {
                     Ok(_) => println!("Message sent to player {}", player.id),
                     Err(err) => eprintln!("FAILED to send to {}: {}", player.id, err),
                 }
+                tokio::time::sleep(tokio::time::Duration::new(1, 0)).await;
                 let _ = player.sender.send(PlayerMessage::TerminateSession).await;
                 removed_players.push(player.clone());
             }
@@ -266,7 +267,6 @@ async fn gameroom_state_loop(gameroom: Arc<Mutex<GameRoom>>) {
             }
         }
 
-        //tokio::time::sleep(tokio::time::Duration::new(1, 0)).await;
     }
 }
 
@@ -286,7 +286,7 @@ impl GameRoomHandle {
         tokio::spawn(gameroom_state_loop(gameroom_mutex));
 
 
-        Self { 
+        Self {
             id: uuid::Uuid::new_v4(),
             sender
         }
