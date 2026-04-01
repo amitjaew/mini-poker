@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter, write};
 use std::cmp::Ordering ;
-use std::ops::Sub;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Rank {

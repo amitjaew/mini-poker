@@ -75,7 +75,7 @@ fn get_straight(ranks: &Vec<u8>) -> Option<Vec<u8>> {
     return None;
 }
 
-pub fn evaluate_hand(hand: &mut [Card]) -> Result<(HandType, Vec<u8>), &'static str> {
+pub fn evaluate_hand(hand: &mut Vec<Card>) -> Result<(HandType, Vec<u8>), &'static str> {
     hand.sort();
     hand.reverse();
 
@@ -247,7 +247,7 @@ pub fn evaluate_hand(hand: &mut [Card]) -> Result<(HandType, Vec<u8>), &'static 
     }
 }
 
-pub fn evaluate_hand_omaha(hand: &mut [Card]) -> Result<(HandType, Vec<u8>), &'static str> {
+pub fn evaluate_hand_omaha(hand: &[Card]) -> Result<(HandType, Vec<u8>), &'static str> {
     let player_cards: Vec<Card> = hand.iter().filter(|c| c.owner == Owner::Player).cloned().collect();
     let community_cards: Vec<Card> = hand.iter().filter(|c| c.owner == Owner::Community).cloned().collect();
 
@@ -256,4 +256,73 @@ pub fn evaluate_hand_omaha(hand: &mut [Card]) -> Result<(HandType, Vec<u8>), &'s
         .filter_map(|mut five_card_hand| evaluate_hand(&mut five_card_hand).ok())
         .max_by_key(|(hand_type, ranks)| (*hand_type as u8, ranks.clone()))
         .ok_or("no valid hand found")
+}
+
+pub enum HandCompare {
+    Tie(Vec<usize>),
+    Winner(usize)
+}
+
+pub fn compare_hands(mut hands: Vec<Vec<Card>>, game_type: GameType) -> Result<HandCompare, &'static str> {
+    let mut hand_results: Vec<(HandType, Vec<u8>)> = Vec::with_capacity(hands.len());
+
+    for mut hand in hands.into_iter() {
+        match game_type {
+            GameType::TexasHoldemPoker => {
+                match evaluate_hand(&mut hand) {
+                    Ok(res) => { hand_results.push(res); },
+                    Err(_) => {
+                        return Err("Some error happened while evaluating hand");
+                    }
+                }
+            },
+            GameType::OmahaPoker => {
+                match evaluate_hand_omaha(&mut hand) {
+                    Ok(res) => { hand_results.push(res); },
+                    Err(_) => {
+                        return Err("Some error happened while evaluating hand");
+                    }
+                }
+            }
+        }
+    }
+
+    let hand_scores: Vec<u32> = hand_results.into_iter().map(|(hand_type, sorted_ranks)| {
+        let mut sum: u32 = 0;
+        const POW_BASE: u32 = 12;
+
+        for j in 0..sorted_ranks.len() {
+            sum += POW_BASE.pow(j as u32) * sorted_ranks[j] as u32;
+        }
+        sum += POW_BASE.pow(sorted_ranks.len() as u32) * (hand_type as u32);
+
+        sum
+    }).collect();
+
+    let mut max_score = 0;
+    let mut max_score_count = 0;
+    let mut last_winner_index = 0;
+
+    for index in 0..hand_scores.len() {
+        let score = hand_scores[index];
+        if score < max_score { continue; }
+        if score == max_score { max_score_count += 1; }
+        else {
+            max_score_count = 0;
+            max_score = score;
+            last_winner_index = index;
+        }
+    }
+
+    if max_score_count == 1 {
+        return Ok(HandCompare::Winner(last_winner_index));
+    }
+
+    let mut tied_indexes: Vec<usize> = Vec::with_capacity(max_score_count);
+    for index in 0..hand_scores.len() {
+        if hand_scores[index] != max_score { continue; }
+        tied_indexes.push(index);
+    }
+
+    Ok(HandCompare::Tie(tied_indexes))
 }

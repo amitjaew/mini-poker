@@ -129,7 +129,7 @@ async fn player_socket_recv_loop(
             Ok(None) => {
 
             },
-            Err(err) => {
+            Err(_err) => {
 
             }
         }

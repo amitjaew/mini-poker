@@ -33,7 +33,8 @@ struct GameRoomPlayerState {
     is_active: bool,
     dealt_cards: Vec<Card>,
     current_bet: u32,
-    action: PlayerGameAction
+    action: PlayerGameAction,
+    funds: u32,
 }
 #[derive(Clone)]
 enum PlayerGameAction {
@@ -80,7 +81,8 @@ impl GameRoom {
                             is_active: false,
                             dealt_cards: Vec::new(),
                             current_bet: 0,
-                            action: PlayerGameAction::None
+                            action: PlayerGameAction::None,
+                            funds: 1_000
                         }
                     }
                 );
@@ -265,6 +267,8 @@ async fn gameroom_state_loop(gameroom: Arc<Mutex<GameRoom>>) {
             for player in removed_players {
                 gameroom_guard.players.retain(|val| val.id != player.id);
             }
+
+
         }
 
     }
