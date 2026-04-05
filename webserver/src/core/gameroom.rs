@@ -4,6 +4,8 @@ use uuid;
 use axum::extract::ws::WebSocket;
 use std::sync::Arc;
 use std::time::Duration;
+use crate::core::game::{self, GameType};
+use crate::core::hand::{ compare_hands, HandCompare };
 use crate::core::player::{ PlayerMessage, Player };
 use crate::core::card::{ Card, DECK };
 use rand;
@@ -18,6 +20,7 @@ struct GameRoomPlayer {
 struct GameRoom {
     players: Vec<GameRoomPlayer>,
     state: GameRoomState,
+    game_type: GameType
 }
 struct GameRoomState {
     step: u32,
@@ -56,7 +59,7 @@ struct GameRoomStateNotification {
 }
 
 impl GameRoom {
-    fn new() -> Self {
+    fn new(game_type: GameType) -> Self {
         let players = Vec::new();
         let state = GameRoomState {
             step: 0,
@@ -66,13 +69,14 @@ impl GameRoom {
             turn_timer: 0,
             turn_duration: 60,
             dealt_card_offset: 0,
-            bet_base: 0
+            bet_base: 0,
         };
 
         Self {
             // id: uuid::Uuid::new_v4(), //(unneeded for now)
             players,
             state,
+            game_type
             //rng: rand::rng()
         }
     }
@@ -167,12 +171,6 @@ async fn handle_step_deal_player_card(
             gameroom.state.deck[gameroom.state.dealt_card_offset]
     );
     gameroom.state.dealt_card_offset += 1;
-}
-
-async fn handle_step_showdown(
-    gameroom: &mut GameRoom
-) {
-
 }
 
 async fn handle_step_betting_round(
@@ -285,7 +283,30 @@ async fn handle_step_betting_round(
             { break; }
         }
     }
+}
 
+async fn handle_step_showdown(
+    gameroom: &mut GameRoom
+) {
+    let hands: Vec<Vec<Card>> = gameroom.players.iter().map(
+        |player|  player.state.dealt_cards.iter()
+            .chain(gameroom.state.community_cards.iter())
+            .map(|card| card.clone()).collect()
+    ).collect();
+
+    match compare_hands(hands, gameroom.game_type) {
+        Ok(result) => {
+            match result {
+                HandCompare::Tie(tied_indexes) => {
+                    // handle tie between player indexes
+                },
+                HandCompare::Winner(winner_index) => {
+                    // handle win for player index
+                }
+            }
+        },
+        Err(err) => {}
+    }
 }
 
 async fn handle_poker_step(
@@ -319,7 +340,8 @@ async fn handle_poker_step(
             handle_step_deal_player_card(&mut gameroom).await;
         },
         PokerStep::Showdown => {
-
+            let mut gameroom = gameroom_mutex.lock().await;
+            handle_step_showdown(&mut gameroom).await;
         },
         PokerStep::BettingRound => {
             handle_step_betting_round(gameroom_mutex, &mut notification_receiver).await;
@@ -410,7 +432,7 @@ impl GameRoomHandle {
     pub async fn new() -> Self {
         let (sender, receiver) = mpsc::channel(100);
         let gameroom_mutex = Arc::new(Mutex::new(
-            GameRoom::new()
+            GameRoom::new(GameType::TexasHoldemPoker)
         ));
 
         let (notif_sender, notif_receiver) = oneshot::channel();

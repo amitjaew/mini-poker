@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 
+#[derive(Clone, Copy)]
 pub enum GameType {
     TexasHoldemPoker = 0,
     OmahaPoker

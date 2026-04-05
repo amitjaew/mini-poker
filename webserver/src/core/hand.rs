@@ -263,7 +263,7 @@ pub enum HandCompare {
     Winner(usize)
 }
 
-pub fn compare_hands(mut hands: Vec<Vec<Card>>, game_type: GameType) -> Result<HandCompare, &'static str> {
+pub fn compare_hands(hands: Vec<Vec<Card>>, game_type: GameType) -> Result<HandCompare, &'static str> {
     let mut hand_results: Vec<(HandType, Vec<u8>)> = Vec::with_capacity(hands.len());
 
     for mut hand in hands.into_iter() {
