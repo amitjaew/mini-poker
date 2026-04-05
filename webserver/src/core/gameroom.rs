@@ -115,132 +115,214 @@ enum PokerStep {
     BettingRound
 }
 
-async fn handle_poker_step(
-    step: PokerStep,
-    gameroom: &mut GameRoom,
+async fn handle_step_blind(
+    gameroom: &mut GameRoom
+) {
+    let mut rng = rand::rng();
+    gameroom.state.deck.shuffle(&mut rng);
+    gameroom.state.community_cards.clear();
+
+    for player in gameroom.players.iter_mut() {
+        player.state.is_betting = true;
+        player.state.dealt_cards.clear();
+    }
+
+    let n_players = gameroom.players.iter().len() as u8;
+    let small_blind_idx = gameroom.state.big_blind_idx % n_players as u8;
+    gameroom.state.big_blind_idx = (small_blind_idx + 1) % n_players as u8;
+}
+
+async fn handle_step_preflop(
+    gameroom: &mut GameRoom
+) {
+    gameroom.state.dealt_card_offset = 0;
+
+    for player in gameroom.players.iter_mut() {
+        if !player.state.is_betting { continue; }
+
+        for i in 0..2 {
+            player.state.dealt_cards.push(
+                gameroom.state.deck[gameroom.state.dealt_card_offset + i]
+            );
+        }
+        gameroom.state.dealt_card_offset += 2;
+    }
+}
+
+async fn handle_step_flop(
+    gameroom: &mut GameRoom
+) {
+    for i in 0..3 {
+        gameroom.state.community_cards.push(
+            gameroom.state.deck[gameroom.state.dealt_card_offset + i]
+        );
+    }
+    gameroom.state.dealt_card_offset += 3;
+}
+
+async fn handle_step_deal_player_card(
+    gameroom: &mut GameRoom
+) {
+    gameroom.state.community_cards.push(
+            gameroom.state.deck[gameroom.state.dealt_card_offset]
+    );
+    gameroom.state.dealt_card_offset += 1;
+}
+
+async fn handle_step_showdown(
+    gameroom: &mut GameRoom
+) {
+
+}
+
+async fn handle_step_betting_round(
+    gameroom_mutex: Arc<Mutex<GameRoom>>,
     mut notification_receiver: &mut oneshot::Receiver<GameRoomStateNotification>
 ) {
-    for player in gameroom.players.iter_mut() {
+    loop {
+        let senders: Vec<mpsc::Sender<PlayerMessage>>;
+        let n_players: usize;
+        {
+            let gameroom = gameroom_mutex.lock().await;
+            senders = gameroom.players.iter().map(|player| player.sender.clone()).collect();
+            n_players = gameroom.players.len();
+        }
+
+        for player_idx in 0..n_players {
+        // for player in gameroom.players.iter_mut() {
+            let player_is_betting: bool;
+            let mut turn_timer: f32;
+            {
+                let gameroom = gameroom_mutex.lock().await;
+                player_is_betting = gameroom.players[player_idx].state.is_betting;
+                turn_timer = gameroom.state.turn_duration as f32;
+            }
+
+            if !player_is_betting { continue; }
+
+            while turn_timer > 0.0 {
+                let tick_start = tokio::time::Instant::now();
+                for sender in senders.iter() {
+                    let timer_payload = PlayerMessage::GameRoomPayload {
+                        content: format!("timer: {}", turn_timer)
+                    };
+                    let _ = sender.send(timer_payload).await;
+                }
+                let tick_end = tick_start + Duration::from_secs(1);
+                loop {
+                    let remaining = tick_end.saturating_duration_since(tokio::time::Instant::now());
+                    if remaining.is_zero() { break; }
+                    match tokio::time::timeout(remaining, &mut notification_receiver).await {
+                        Ok(_) => {},
+                        Err(_) => break,
+                    }
+                }
+
+
+                {
+                    let mut gameroom = gameroom_mutex.lock().await;
+                    let bet_base = gameroom.state.bet_base;
+                    let mut bet_base_update = gameroom.state.bet_base;
+
+                    match gameroom.players.get_mut(player_idx) {
+                        Some(player) => {
+                            match player.state.action {
+                                PlayerGameAction::None => { },
+                                PlayerGameAction::Fold => {
+                                    player.state.is_betting = false;
+                                    break;
+                                },
+                                PlayerGameAction::Call => {
+                                    player.state.bet = bet_base;
+                                    break;
+                                },
+                                PlayerGameAction::Check => {
+                                    if player.state.bet == bet_base {
+                                        break;
+                                    }
+                                    else {
+                                        // Cannot Check if bet base changed
+                                        let warning = PlayerMessage::GameRoomPayload { content: "Error".to_string() };
+                                        let _ = player.sender.send(warning).await;
+                                    }
+                                },
+                                PlayerGameAction::Raise(raise) => {
+                                    bet_base_update += raise;
+                                    player.state.bet += bet_base_update;
+                                    break;
+                                }
+                            }
+                        },
+                        None => {}
+                    }
+                    gameroom.state.bet_base = bet_base_update;
+                }
+
+                turn_timer -= tick_start.elapsed().as_secs_f32();
+            }
+
+            {
+                let mut gameroom = gameroom_mutex.lock().await;
+                let bet_base = gameroom.state.bet_base;
+
+                match gameroom.players.get_mut(player_idx) {
+                    Some(player) => {
+                        if player.state.bet < bet_base {
+                            player.state.is_betting = false;
+                        }
+                    },
+                    None => {}
+                }
+            }
+        }
+
+        {
+            let gameroom = gameroom_mutex.lock().await;
+            let mut active_players = gameroom.players.iter().filter(|player| player.state.is_betting);
+            if
+                active_players.clone().count() <= 1 ||
+                active_players.all(|player| player.state.bet == gameroom.state.bet_base)
+            { break; }
+        }
+    }
+
+}
+
+async fn handle_poker_step(
+    step: PokerStep,
+    // gameroom: &mut GameRoom,
+    gameroom_mutex: Arc<Mutex<GameRoom>>,
+    mut notification_receiver: &mut oneshot::Receiver<GameRoomStateNotification>
+) {
+    for player in gameroom_mutex.lock().await.players.iter_mut() {
         player.state.action = PlayerGameAction::None;
     }
     match step {
         PokerStep::Blind => {
-            let mut rng = rand::rng();
-            gameroom.state.deck.shuffle(&mut rng);
-            gameroom.state.community_cards.clear();
-
-            for player in gameroom.players.iter_mut() {
-                player.state.is_betting = true;
-                player.state.dealt_cards.clear();
-            }
-
-            let n_players = gameroom.players.iter().len() as u8;
-            let small_blind_idx = gameroom.state.big_blind_idx % n_players as u8;
-            gameroom.state.big_blind_idx = (small_blind_idx + 1) % n_players as u8;
+            let mut gameroom = gameroom_mutex.lock().await;
+            handle_step_blind(&mut gameroom).await;
         },
         PokerStep::PreFlop => {
-            gameroom.state.dealt_card_offset = 0;
-
-            for player in gameroom.players.iter_mut() {
-                if !player.state.is_betting { continue; }
-
-                for i in 0..2 {
-                    player.state.dealt_cards.push(
-                        gameroom.state.deck[gameroom.state.dealt_card_offset + i]
-                    );
-                }
-                gameroom.state.dealt_card_offset += 2;
-            }
+            let mut gameroom = gameroom_mutex.lock().await;
+            handle_step_preflop(&mut gameroom).await;
         },
         PokerStep::Flop => {
-            for i in 0..3 {
-                gameroom.state.community_cards.push(
-                    gameroom.state.deck[gameroom.state.dealt_card_offset + i]
-                );
-            }
-            gameroom.state.dealt_card_offset += 3;
+            let mut gameroom = gameroom_mutex.lock().await;
+            handle_step_flop(&mut gameroom).await;
         },
         PokerStep::Turn => {
-            gameroom.state.community_cards.push(
-                    gameroom.state.deck[gameroom.state.dealt_card_offset]
-            );
-            gameroom.state.dealt_card_offset += 1;
+            let mut gameroom = gameroom_mutex.lock().await;
+            handle_step_deal_player_card(&mut gameroom).await;
         },
         PokerStep::River => {
-            gameroom.state.community_cards.push(
-                    gameroom.state.deck[gameroom.state.dealt_card_offset]
-            );
-            gameroom.state.dealt_card_offset += 1;
-
+            let mut gameroom = gameroom_mutex.lock().await;
+            handle_step_deal_player_card(&mut gameroom).await;
         },
         PokerStep::Showdown => {
 
         },
         PokerStep::BettingRound => {
-            loop {
-                let senders: Vec<mpsc::Sender<PlayerMessage>> = gameroom.players.iter().map(|player| player.sender.clone()).collect();
-                for player in gameroom.players.iter_mut() {
-                    if !player.state.is_betting { continue; }
-
-                    let mut turn_timer = gameroom.state.turn_duration as f32;
-                    while turn_timer > 0.0 {
-                        let tick_start = tokio::time::Instant::now();
-                        for sender in senders.iter() {
-                            let timer_payload = PlayerMessage::GameRoomPayload {
-                                content: format!("timer: {}", turn_timer)
-                            };
-                            let _ = sender.send(timer_payload).await;
-                        }
-                        let tick_end = tick_start + Duration::from_secs(1);
-                        loop {
-                            let remaining = tick_end.saturating_duration_since(tokio::time::Instant::now());
-                            if remaining.is_zero() { break; }
-                            match tokio::time::timeout(remaining, &mut notification_receiver).await {
-                                Ok(_) => {},
-                                Err(_) => break,
-                            }
-                        }
-                        match player.state.action {
-                            PlayerGameAction::None => { },
-                            PlayerGameAction::Fold => {
-                                player.state.is_betting = false;
-                                break;
-                            },
-                            PlayerGameAction::Call => {
-                                player.state.bet = gameroom.state.bet_base;
-                                break;
-                            },
-                            PlayerGameAction::Check => {
-                                if player.state.bet == gameroom.state.bet_base {
-                                    break;
-                                }
-                                else {
-                                    // Cannot Check if bet base changed
-                                    let warning = PlayerMessage::GameRoomPayload { content: "Error".to_string() };
-                                    let _ = player.sender.send(warning).await;
-                                }
-                            },
-                            PlayerGameAction::Raise(raise) => {
-                                gameroom.state.bet_base += raise;
-                                player.state.bet += raise;
-                                break;
-                            }
-                        }
-
-                        turn_timer -= tick_start.elapsed().as_secs_f32();
-                    }
-
-                    if player.state.bet < gameroom.state.bet_base {
-                        player.state.is_betting = false;
-                    }
-                }
-
-                let mut active_players = gameroom.players.iter().filter(|player| player.state.is_betting);
-                if
-                    active_players.clone().count() <= 1 ||
-                    active_players.all(|player| player.state.bet == gameroom.state.bet_base)
-                { break; }
-            }
+            handle_step_betting_round(gameroom_mutex, &mut notification_receiver).await;
         }
     }
 }
@@ -273,15 +355,17 @@ async fn gameroom_state_loop(
 ) {
     loop {
         {
-            if (gameroom.lock().await.players.len() == 0) { continue;}
+            if gameroom.lock().await.players.len() == 0 { continue;}
         }
 
 
-        for i in 0..2 {
-            let mut gameroom_guard = gameroom.lock().await;
-
+        for _ in 0..2 {
             for step in STANDARD_POKER_STEPS {
-                handle_poker_step(step, &mut gameroom_guard, &mut notification_receiver).await;
+                handle_poker_step(
+                    step,
+                    gameroom.clone(),
+                    &mut notification_receiver
+                ).await;
             }
         }
 
@@ -314,7 +398,6 @@ async fn gameroom_state_loop(
 
             //println!("state: {}", gameroom_guard.state.step);
         }
-
     }
 }
 
