@@ -1,3 +1,4 @@
+use axum::Json;
 use tokio::sync::{ mpsc, Mutex };
 use tokio::time::{timeout, Duration};
 use tokio;
@@ -17,7 +18,7 @@ pub struct Player {
     active: Arc<Mutex<bool>>
 }
 pub enum PlayerMessage {
-    GameRoomPayload { content: u32 },
+    GameRoomPayload { content: String },
     TerminateSession
 }
 
