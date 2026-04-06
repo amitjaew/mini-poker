@@ -31,8 +31,7 @@ struct GameRoomState {
     community_cards: Vec<Card>,
     big_blind_idx: u8,
     dealt_card_offset: usize,
-    bet_base: u32,
-    bet_sum: u32
+    bet_base: u32
 }
 #[derive(Clone)]
 struct GameRoomPlayerState {
@@ -71,8 +70,7 @@ impl GameRoom {
             turn_timer: 0,
             turn_duration: 60,
             dealt_card_offset: 0,
-            bet_base: 0,
-            bet_sum: 0
+            bet_base: 0
         };
 
         Self {
@@ -142,14 +140,12 @@ async fn handle_step_blind(
     match gameroom.players.get_mut(small_blind_idx as usize) {
         Some(player) => {
             player.state.bet = gameroom.min_bet;
-            gameroom.state.bet_sum = gameroom.min_bet;
         },
         None => {}
     }
     match gameroom.players.get_mut(gameroom.state.big_blind_idx as usize) {
         Some(player) => {
             player.state.bet = 2 * gameroom.min_bet;
-            gameroom.state.bet_sum += 2 * gameroom.min_bet;
         },
         None => {}
     }
@@ -236,33 +232,30 @@ async fn handle_step_betting_round(
                 }
 
 
-                let mut bet_delta: u32 = 0;
                 {
                     let mut gameroom = gameroom_mutex.lock().await;
                     let bet_base = gameroom.state.bet_base;
                     let mut bet_base_update = gameroom.state.bet_base;
+                    let mut is_action = true;
 
                     match gameroom.players.get_mut(player_idx) {
                         Some(player) => {
-                            bet_delta = bet_base.saturating_sub(player.state.bet);
-
                             match player.state.action {
                                 PlayerGameAction::None => {
+                                    is_action = false;
                                 },
                                 PlayerGameAction::Fold => {
                                     player.state.is_betting = false;
-                                    break;
                                 },
                                 PlayerGameAction::Call => {
                                     player.state.bet = bet_base;
-                                    break;
                                 },
                                 PlayerGameAction::Check => {
                                     if player.state.bet == bet_base {
-                                        break;
                                     }
                                     else {
                                         // Cannot Check if bet base changed
+                                        is_action = false;
                                         let warning = PlayerMessage::GameRoomPayload { content: "Error".to_string() };
                                         let _ = player.sender.send(warning).await;
                                     }
@@ -270,14 +263,15 @@ async fn handle_step_betting_round(
                                 PlayerGameAction::Raise(raise) => {
                                     bet_base_update += raise;
                                     player.state.bet += bet_base_update;
-                                    break;
                                 }
                             }
                         },
-                        None => {}
+                        None => { is_action = false; }
                     }
-                    gameroom.state.bet_base = bet_base_update;
-                    gameroom.state.bet_sum += bet_delta;
+                    if is_action {
+                        gameroom.state.bet_base = bet_base_update;
+                        break;
+                    }
                 }
 
                 turn_timer -= tick_start.elapsed().as_secs_f32();
@@ -318,12 +312,14 @@ async fn handle_step_showdown(
             .map(|card| card.clone()).collect()
     ).collect();
 
+    let bet_sum: u32 = gameroom.players.iter().map(|player| player.state.bet).sum();
+
     match compare_hands(hands, gameroom.game_type) {
         Ok(result) => {
             match result {
                 HandCompare::Tie(tied_indexes) => {
                     // handle tie between player indexes
-                    let divided_amount = gameroom.state.bet_sum / tied_indexes.len() as u32;
+                    let divided_amount = bet_sum / tied_indexes.len() as u32;
 
                     for player_idx in tied_indexes {
                         match gameroom.players.get_mut(player_idx) {
@@ -337,7 +333,7 @@ async fn handle_step_showdown(
                 HandCompare::Winner(winner_index) => {
                     match gameroom.players.get_mut(winner_index) {
                         Some(player) => {
-                            player.state.funds += gameroom.state.bet_sum;
+                            player.state.funds += bet_sum;
                         },
                         None => {}
                     }
@@ -345,7 +341,6 @@ async fn handle_step_showdown(
             }
 
             gameroom.state.bet_base = 0;
-            gameroom.state.bet_sum = 0;
         },
         Err(err) => {}
     }
