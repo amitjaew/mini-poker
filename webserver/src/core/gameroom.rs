@@ -20,7 +20,8 @@ struct GameRoomPlayer {
 struct GameRoom {
     players: Vec<GameRoomPlayer>,
     state: GameRoomState,
-    game_type: GameType
+    game_type: GameType,
+    min_bet: u32
 }
 struct GameRoomState {
     step: u32,
@@ -30,7 +31,8 @@ struct GameRoomState {
     community_cards: Vec<Card>,
     big_blind_idx: u8,
     dealt_card_offset: usize,
-    bet_base: u32
+    bet_base: u32,
+    bet_sum: u32
 }
 #[derive(Clone)]
 struct GameRoomPlayerState {
@@ -70,13 +72,15 @@ impl GameRoom {
             turn_duration: 60,
             dealt_card_offset: 0,
             bet_base: 0,
+            bet_sum: 0
         };
 
         Self {
             // id: uuid::Uuid::new_v4(), //(unneeded for now)
             players,
             state,
-            game_type
+            game_type,
+            min_bet: 1
             //rng: rand::rng()
         }
     }
@@ -134,6 +138,21 @@ async fn handle_step_blind(
     let n_players = gameroom.players.iter().len() as u8;
     let small_blind_idx = gameroom.state.big_blind_idx % n_players as u8;
     gameroom.state.big_blind_idx = (small_blind_idx + 1) % n_players as u8;
+
+    match gameroom.players.get_mut(small_blind_idx as usize) {
+        Some(player) => {
+            player.state.bet = gameroom.min_bet;
+            gameroom.state.bet_sum = gameroom.min_bet;
+        },
+        None => {}
+    }
+    match gameroom.players.get_mut(gameroom.state.big_blind_idx as usize) {
+        Some(player) => {
+            player.state.bet = 2 * gameroom.min_bet;
+            gameroom.state.bet_sum += 2 * gameroom.min_bet;
+        },
+        None => {}
+    }
 }
 
 async fn handle_step_preflop(
@@ -217,6 +236,7 @@ async fn handle_step_betting_round(
                 }
 
 
+                let mut bet_delta: u32 = 0;
                 {
                     let mut gameroom = gameroom_mutex.lock().await;
                     let bet_base = gameroom.state.bet_base;
@@ -224,8 +244,11 @@ async fn handle_step_betting_round(
 
                     match gameroom.players.get_mut(player_idx) {
                         Some(player) => {
+                            bet_delta = bet_base.saturating_sub(player.state.bet);
+
                             match player.state.action {
-                                PlayerGameAction::None => { },
+                                PlayerGameAction::None => {
+                                },
                                 PlayerGameAction::Fold => {
                                     player.state.is_betting = false;
                                     break;
@@ -254,6 +277,7 @@ async fn handle_step_betting_round(
                         None => {}
                     }
                     gameroom.state.bet_base = bet_base_update;
+                    gameroom.state.bet_sum += bet_delta;
                 }
 
                 turn_timer -= tick_start.elapsed().as_secs_f32();
@@ -299,11 +323,29 @@ async fn handle_step_showdown(
             match result {
                 HandCompare::Tie(tied_indexes) => {
                     // handle tie between player indexes
+                    let divided_amount = gameroom.state.bet_sum / tied_indexes.len() as u32;
+
+                    for player_idx in tied_indexes {
+                        match gameroom.players.get_mut(player_idx) {
+                            Some(player) => {
+                                player.state.funds += divided_amount;
+                            },
+                            None => {}
+                        }
+                    }
                 },
                 HandCompare::Winner(winner_index) => {
-                    // handle win for player index
+                    match gameroom.players.get_mut(winner_index) {
+                        Some(player) => {
+                            player.state.funds += gameroom.state.bet_sum;
+                        },
+                        None => {}
+                    }
                 }
             }
+
+            gameroom.state.bet_base = 0;
+            gameroom.state.bet_sum = 0;
         },
         Err(err) => {}
     }
