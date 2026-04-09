@@ -1,10 +1,10 @@
-use tokio::sync::{ Mutex, MutexGuard, mpsc, oneshot };
+use serde::{Deserialize, Serialize};
+use tokio::sync::{ Mutex, mpsc, oneshot };
 use tokio;
-use uuid;
 use axum::extract::ws::WebSocket;
 use std::sync::Arc;
 use std::time::Duration;
-use crate::core::game::{self, GameType};
+use crate::core::game::{GameType};
 use crate::core::hand::{ compare_hands, HandCompare };
 use crate::core::player::{ PlayerMessage, Player };
 use crate::core::card::{ Card, DECK };
@@ -50,8 +50,18 @@ enum PlayerGameAction {
     Call,
     Raise(u32)
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PlayerPayload {
+    Fold,
+    Check,
+    Call,
+    Raise { amount: u32 }
+}
+
 pub enum GameRoomMessage {
-    PlayerPayload { content: String, from: uuid::Uuid },
+    PlayerPayload { payload: PlayerPayload, from: uuid::Uuid },
     PlayerJoin { id: uuid::Uuid, sender: mpsc::Sender<PlayerMessage> }
 }
 
@@ -100,9 +110,9 @@ impl GameRoom {
                     }
                 );
             },
-            GameRoomMessage::PlayerPayload { from, content } => {
+            GameRoomMessage::PlayerPayload { from, payload } => {
                 //println!("Gameroom {} received {} from Player {}", self.id, content, from);
-                println!("Gameroom received {} from Player {}", content, from);
+                println!("Gameroom received {:?} from Player {}", payload, from);
                 self.state.step = 0; // JUST FOR DEBUGGING
 
                 // TODO: Manage and validate player actions (check, raise, fold, call, etc)
@@ -216,9 +226,7 @@ async fn handle_step_betting_round(
             while turn_timer > 0.0 {
                 let tick_start = tokio::time::Instant::now();
                 for sender in senders.iter() {
-                    let timer_payload = PlayerMessage::GameRoomPayload {
-                        content: format!("timer: {}", turn_timer)
-                    };
+                    let timer_payload = PlayerMessage::Timer { time: turn_timer };
                     let _ = sender.send(timer_payload).await;
                 }
                 let tick_end = tick_start + Duration::from_secs(1);
@@ -256,7 +264,11 @@ async fn handle_step_betting_round(
                                     else {
                                         // Cannot Check if bet base changed
                                         is_action = false;
-                                        let warning = PlayerMessage::GameRoomPayload { content: "Error".to_string() };
+                                        // let warning = PlayerMessage::GameRoomPayload { content: "Error".to_string() };
+                                        let warning = PlayerMessage::Warning {
+                                            warning_type: super::player::PlayerWarningType::InvalidAction,
+                                            message: "Cannot check".to_owned()
+                                        };
                                         let _ = player.sender.send(warning).await;
                                     }
                                 },

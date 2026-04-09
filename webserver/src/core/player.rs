@@ -1,24 +1,46 @@
-use axum::Json;
 use tokio::sync::{ mpsc, Mutex };
 use tokio::time::{timeout, Duration};
 use tokio;
-use uuid;
 use axum::extract::ws::{ CloseFrame, Message, Utf8Bytes, WebSocket };
 use futures_util::{
    sink::SinkExt,
    stream::{ StreamExt, SplitSink, SplitStream }
 };
 use std::sync::Arc;
+use serde::{Serialize, Deserialize};
 
-use crate::core::gameroom::GameRoomMessage;
-
+use crate::core::gameroom::{GameRoomMessage, PlayerPayload};
 
 pub struct Player {
     pub id: uuid::Uuid,
     active: Arc<Mutex<bool>>
 }
+
+#[derive(Serialize, Deserialize)]
+struct WinnerPayload {
+    winner_id: String,
+    prize: u32
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PlayerWarningType {
+    Debug,
+    InvalidAction
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlayerMessage {
-    GameRoomPayload { content: String },
+    Debug { content: String },
+    Timer { time: f32 },
+    Result {
+        winners: Vec<WinnerPayload>
+    },
+    Warning {
+        warning_type: PlayerWarningType,
+        message: String
+    },
     TerminateSession
 }
 
@@ -69,16 +91,16 @@ async fn player_message_recv_loop(
         match result {
             Ok(Some(message)) => {
                 match message {
-                    PlayerMessage::GameRoomPayload { content } => {
-                        println!("Player {} received from server: {}", player_id, content);
-                        let message = Message::text(format!("message: {}", content));
-                        let _ = socket_sender.send(message).await;
-                    },
                     PlayerMessage::TerminateSession => {
-                        println!("Player {} received: Terminate Session Message", player_id);
+                        println!("Player {}: Sending Terminate Session Message", player_id);
 
                         let close_payload: CloseFrame = CloseFrame { code: 1000, reason: Utf8Bytes::from("closing") };
                         let _ = socket_sender.send(Message::Close(Some(close_payload))).await;
+                    },
+                    _ => {
+                        let content = serde_json::to_string(&message).unwrap_or(String::new());
+                        println!("Player {}: Sending \n{}\n------------------------", player_id, content);
+                        let _ = socket_sender.send(Message::text(content)).await;
                     }
                 }
             },
@@ -113,11 +135,19 @@ async fn player_socket_recv_loop(
                 match message_unparsed.to_text() {
                     Ok(message) => {
                         println!("Player {} sent message: {}", player_id, message);
-                        let payload = GameRoomMessage::PlayerPayload {
-                            content: message.to_string(),
-                            from: player_id
-                        };
-                        let _ = sender.send(payload).await;
+                        match serde_json::from_str::<PlayerPayload>(message) {
+                            Ok(payload) => {
+                                let _ = sender.send(
+                                    GameRoomMessage::PlayerPayload {
+                                        payload,
+                                        from: player_id
+                                    }
+                                ).await;
+                            },
+                            Err(err) => {
+                                eprintln!("Player {} sent invalid action: {}, {}", player_id, message, err);
+                            }
+                        }
                     },
                     Err(err) => {
                         eprintln!("Invalid text message: {}", err);
