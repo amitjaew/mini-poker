@@ -2,9 +2,11 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{ Mutex, mpsc, oneshot };
 use tokio;
 use axum::extract::ws::WebSocket;
+use uuid::Uuid;
 use std::sync::Arc;
 use std::time::Duration;
 use crate::core::game::{GameType};
+use crate::core::gameroom;
 use crate::core::hand::{ compare_hands, HandCompare };
 use crate::core::player::{ PlayerMessage, Player };
 use crate::core::card::{ Card, DECK };
@@ -23,6 +25,14 @@ struct GameRoom {
     game_type: GameType,
     min_bet: u32
 }
+impl GameRoom {
+    async fn broadcast(self: &Self, message: PlayerMessage) {
+        for player in self.players.iter() {
+            _ = player.sender.send(message.clone()).await;
+        }
+    }
+}
+
 struct GameRoomState {
     step: u32,
     deck: [Card; 52],
@@ -78,7 +88,7 @@ impl GameRoom {
             community_cards: Vec::new(),
             big_blind_idx: 0,
             turn_timer: 0,
-            turn_duration: 60,
+            turn_duration: 10,
             dealt_card_offset: 0,
             bet_base: 0
         };
@@ -95,20 +105,28 @@ impl GameRoom {
     async fn handle_gameroom_message(&mut self, message: GameRoomMessage) {
         match message {
             GameRoomMessage::PlayerJoin { id, sender } => {
-                self.players.push(
-                    GameRoomPlayer{
-                        id,
-                        sender,
-                        state: GameRoomPlayerState {
-                            is_playing: false,
-                            is_betting: false,
-                            dealt_cards: Vec::new(),
-                            bet: 0,
-                            action: PlayerGameAction::None,
-                            funds: 1_000
-                        }
+                match self.players.iter_mut().find(|player| player.id == id) {
+                    Some(player) => {
+                        player.sender = sender;
+                    },
+                    None => {
+                        self.players.push(
+                            GameRoomPlayer{
+                                id,
+                                sender,
+                                state: GameRoomPlayerState {
+                                    is_playing: false,
+                                    is_betting: false,
+                                    dealt_cards: Vec::new(),
+                                    bet: 0,
+                                    action: PlayerGameAction::None,
+                                    funds: 1_000
+                                }
+                            }
+                        );
                     }
-                );
+                }
+
             },
             GameRoomMessage::PlayerPayload { from, payload } => {
                 //println!("Gameroom {} received {} from Player {}", self.id, content, from);
@@ -203,32 +221,30 @@ async fn handle_step_betting_round(
     mut notification_receiver: &mut oneshot::Receiver<GameRoomStateNotification>
 ) {
     loop {
-        let senders: Vec<mpsc::Sender<PlayerMessage>>;
         let n_players: usize;
         {
             let gameroom = gameroom_mutex.lock().await;
-            senders = gameroom.players.iter().map(|player| player.sender.clone()).collect();
             n_players = gameroom.players.len();
         }
 
         for player_idx in 0..n_players {
         // for player in gameroom.players.iter_mut() {
-            let player_is_betting: bool;
             let mut turn_timer: f32;
             {
                 let gameroom = gameroom_mutex.lock().await;
-                player_is_betting = gameroom.players[player_idx].state.is_betting;
+                let player_is_betting = gameroom.players[player_idx].state.is_betting;
+                if !player_is_betting { continue; }
                 turn_timer = gameroom.state.turn_duration as f32;
+                gameroom.broadcast(
+                    PlayerMessage::Turn { player_id: gameroom.players[player_idx].id }
+                ).await;
             }
 
-            if !player_is_betting { continue; }
 
             while turn_timer > 0.0 {
                 let tick_start = tokio::time::Instant::now();
-                for sender in senders.iter() {
-                    let timer_payload = PlayerMessage::Timer { time: turn_timer };
-                    let _ = sender.send(timer_payload).await;
-                }
+                gameroom_mutex.lock().await.broadcast(PlayerMessage::Timer { time: turn_timer }).await;
+
                 let tick_end = tick_start + Duration::from_secs(1);
                 loop {
                     let remaining = tick_end.saturating_duration_since(tokio::time::Instant::now());
@@ -273,6 +289,15 @@ async fn handle_step_betting_round(
                                     }
                                 },
                                 PlayerGameAction::Raise(raise) => {
+                                    // TODO 1: Manage raise policy handling:
+                                    //  * no limit: No limit is applied
+                                    //  * limit: Raise is fixed amount
+                                    //  * pot limit: Raise is capped to pot
+                                    //
+                                    // TODO 2: Re-raise counting and policy handling
+                                    // * no limit: Re raise unlimitetd
+                                    // * limit: 4 bet cap
+                                    // * pot limit: unlimited
                                     bet_base_update += raise;
                                     player.state.bet += bet_base_update;
                                 }
@@ -429,6 +454,7 @@ async fn gameroom_state_loop(
             if gameroom.lock().await.players.len() == 0 { continue;}
         }
 
+        tokio::time::sleep(Duration::from_secs(5)).await;
 
         for _ in 0..2 {
             for step in STANDARD_POKER_STEPS {
@@ -496,10 +522,12 @@ impl GameRoomHandle {
         }
     }
 
-    pub async fn handle_player_connection (&self, websocket: WebSocket) {
+    pub async fn handle_player_connection (&self, websocket: WebSocket, player_id: Uuid) {
         let (player_sender, player_receiver) = mpsc::channel(10);
         let gameroom_sender = self.sender.clone();
-        let player = Player::new(
+
+        let player = Player::from_id(
+            player_id,
             gameroom_sender,
             player_receiver,
             websocket

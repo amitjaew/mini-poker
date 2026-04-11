@@ -6,6 +6,7 @@ use futures_util::{
    sink::SinkExt,
    stream::{ StreamExt, SplitSink, SplitStream }
 };
+use uuid::Uuid;
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 
@@ -16,23 +17,24 @@ pub struct Player {
     active: Arc<Mutex<bool>>
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 struct WinnerPayload {
     winner_id: String,
     prize: u32
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlayerWarningType {
     Debug,
     InvalidAction
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlayerMessage {
     Debug { content: String },
+    Turn { player_id: Uuid },
     Timer { time: f32 },
     Result {
         winners: Vec<WinnerPayload>
@@ -52,6 +54,37 @@ impl Player {
     ) -> Self {
         let (socket_sender, socket_receiver) = socket.split();
         let id = uuid::Uuid::new_v4();
+        let active = Arc::new(Mutex::new(true));
+        tokio::spawn(
+            player_message_recv_loop(
+                id.clone(),
+                receiver,
+                socket_sender,
+                active.clone()
+            )
+        );
+        tokio::spawn(
+            player_socket_recv_loop(
+                id.clone(),
+                socket_receiver,
+                sender,
+                active.clone()
+            )
+        );
+
+        Self {
+            id: id.clone(),
+            active
+        }
+    }
+
+    pub fn from_id(
+        id: Uuid,
+        sender: mpsc::Sender<GameRoomMessage>,
+        receiver: mpsc::Receiver<PlayerMessage>,
+        socket: WebSocket,
+    ) -> Self {
+        let (socket_sender, socket_receiver) = socket.split();
         let active = Arc::new(Mutex::new(true));
         tokio::spawn(
             player_message_recv_loop(

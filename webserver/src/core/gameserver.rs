@@ -1,7 +1,7 @@
 use crate::core::gameroom::GameRoomHandle;
 use tokio::sync::{mpsc, oneshot};
 use tokio;
-use uuid;
+use uuid::{self, Uuid};
 use axum::extract::ws::WebSocket;
 
 
@@ -23,8 +23,12 @@ impl GameServer {
 
     async fn handle_join_player(&mut self, websocket: WebSocket, room_id: uuid::Uuid) {
         let gameroom_handler_attempt = self.gameroom_handlers.iter().find(|&v| v.id == room_id);
+
+        // id is placeholder, later will be handled via auth
+        let id = Uuid::new_v4();
+
         match gameroom_handler_attempt {
-            Some(gameroom_handler) => gameroom_handler.handle_player_connection(websocket).await,
+            Some(gameroom_handler) => gameroom_handler.handle_player_connection(websocket, id).await,
             None => {}
         }
     }
