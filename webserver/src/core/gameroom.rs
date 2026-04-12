@@ -18,12 +18,14 @@ struct GameRoomPlayer {
     sender: mpsc::Sender<PlayerMessage>,
     state: GameRoomPlayerState,
 }
+
 struct GameRoom {
     players: Vec<GameRoomPlayer>,
     state: GameRoomState,
     game_type: GameType,
     min_bet: u32
 }
+
 impl GameRoom {
     async fn broadcast(self: &Self, message: PlayerMessage) {
         for player in self.players.iter() {
@@ -43,6 +45,7 @@ struct GameRoomState {
     bet_base: u32,
     current_player_turn: Option<Uuid>
 }
+
 #[derive(Clone)]
 struct GameRoomPlayerState {
     is_playing: bool,
@@ -52,6 +55,7 @@ struct GameRoomPlayerState {
     action: PlayerGameAction,
     funds: u32,
 }
+
 #[derive(Clone)]
 enum PlayerGameAction {
     None,
@@ -484,15 +488,13 @@ async fn gameroom_message_loop(
         ).await;
     }
 }
+
 async fn gameroom_state_loop(
     gameroom: Arc<Mutex<GameRoom>>,
     mut notification_receiver: mpsc::Receiver<GameRoomStateNotification>
 ) {
     loop {
-        {
-            if gameroom.lock().await.players.len() == 0 { continue;}
-        }
-
+        if gameroom.lock().await.players.len() == 0 { continue; }
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         for _ in 0..2 {
@@ -503,36 +505,6 @@ async fn gameroom_state_loop(
                     &mut notification_receiver
                 ).await;
             }
-        }
-
-        {
-            // {
-            //     let mut gameroom_guard = gameroom.lock().await;
-            //     let mut removed_players = Vec::new();
-            //
-            //     for player in gameroom_guard.players.iter() {
-            //         match player.sender.clone().send(PlayerMessage::GameRoomPayload { content: "test message".to_string() }).await {
-            //             Ok(_) => println!("Message sent to player {}", player.id),
-            //             Err(err) => eprintln!("FAILED to send to {}: {}", player.id, err),
-            //         }
-            //         tokio::time::sleep(tokio::time::Duration::new(1, 0)).await;
-            //         let _ = player.sender.send(PlayerMessage::TerminateSession).await;
-            //         removed_players.push(player.clone());
-            //     }
-            //
-            //     for player in removed_players {
-            //         gameroom_guard.players.retain(|val| val.id != player.id);
-            //     }
-            // }
-            //
-            // Wait till enough players ready
-            // _ = tokio::time::timeout(
-            //     Duration::from_secs(2),
-            //     &mut notification_receiver
-            // ).await;
-
-
-            //println!("state: {}", gameroom_guard.state.step);
         }
     }
 }
@@ -550,10 +522,8 @@ impl GameRoomHandle {
         ));
 
         let (notif_sender, notif_receiver) = mpsc::channel(10);
-
         tokio::spawn(gameroom_message_loop(gameroom_mutex.clone(), receiver, notif_sender));
         tokio::spawn(gameroom_state_loop(gameroom_mutex, notif_receiver));
-
 
         Self {
             id: uuid::Uuid::new_v4(),
