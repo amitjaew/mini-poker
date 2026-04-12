@@ -1,12 +1,11 @@
 use serde::{Deserialize, Serialize};
-use tokio::sync::{ Mutex, mpsc, oneshot };
+use tokio::sync::{ Mutex, mpsc };
 use tokio;
 use axum::extract::ws::WebSocket;
 use uuid::Uuid;
 use std::sync::Arc;
 use std::time::Duration;
 use crate::core::game::{GameType};
-use crate::core::gameroom;
 use crate::core::hand::{ compare_hands, HandCompare };
 use crate::core::player::{ PlayerMessage, Player };
 use crate::core::card::{ Card, DECK };
@@ -41,7 +40,8 @@ struct GameRoomState {
     community_cards: Vec<Card>,
     big_blind_idx: u8,
     dealt_card_offset: usize,
-    bet_base: u32
+    bet_base: u32,
+    current_player_turn: Option<Uuid>
 }
 #[derive(Clone)]
 struct GameRoomPlayerState {
@@ -90,7 +90,8 @@ impl GameRoom {
             turn_timer: 0,
             turn_duration: 10,
             dealt_card_offset: 0,
-            bet_base: 0
+            bet_base: 0,
+            current_player_turn: None
         };
 
         Self {
@@ -102,7 +103,10 @@ impl GameRoom {
             //rng: rand::rng()
         }
     }
-    async fn handle_gameroom_message(&mut self, message: GameRoomMessage) {
+    async fn handle_gameroom_message(
+        &mut self, message: GameRoomMessage,
+        notification_sender: &mut mpsc::Sender<GameRoomStateNotification>
+    ) {
         match message {
             GameRoomMessage::PlayerJoin { id, sender } => {
                 match self.players.iter_mut().find(|player| player.id == id) {
@@ -129,11 +133,35 @@ impl GameRoom {
 
             },
             GameRoomMessage::PlayerPayload { from, payload } => {
-                //println!("Gameroom {} received {} from Player {}", self.id, content, from);
                 println!("Gameroom received {:?} from Player {}", payload, from);
-                self.state.step = 0; // JUST FOR DEBUGGING
 
-                // TODO: Manage and validate player actions (check, raise, fold, call, etc)
+                let mut _player = self.players.iter_mut().find(|player| player.id == from );
+                if _player.is_none() {
+                    return;
+                }
+                let player = _player.unwrap();
+
+                match payload {
+                    PlayerPayload::Fold => {
+                        player.state.action = PlayerGameAction::Fold;
+                    },
+                    PlayerPayload::Call => {
+                        player.state.action = PlayerGameAction::Call;
+                    },
+                    PlayerPayload::Check => {
+                        player.state.action = PlayerGameAction::Check;
+                    },
+                    PlayerPayload::Raise { amount } => {
+                        player.state.action = PlayerGameAction::Raise(amount);
+                    }
+                }
+
+                if  self.state.current_player_turn.is_some() &&
+                    self.state.current_player_turn.unwrap() == player.id {
+                    _ = notification_sender.send(
+                        GameRoomStateNotification { content: "player updated".to_string() }
+                    ).await;
+                }
             }
         }
     }
@@ -218,7 +246,7 @@ async fn handle_step_deal_player_card(
 
 async fn handle_step_betting_round(
     gameroom_mutex: Arc<Mutex<GameRoom>>,
-    mut notification_receiver: &mut oneshot::Receiver<GameRoomStateNotification>
+    notification_receiver: &mut mpsc::Receiver<GameRoomStateNotification>
 ) {
     loop {
         let n_players: usize;
@@ -231,9 +259,11 @@ async fn handle_step_betting_round(
         // for player in gameroom.players.iter_mut() {
             let mut turn_timer: f32;
             {
-                let gameroom = gameroom_mutex.lock().await;
+                let mut gameroom = gameroom_mutex.lock().await;
                 let player_is_betting = gameroom.players[player_idx].state.is_betting;
                 if !player_is_betting { continue; }
+
+                gameroom.state.current_player_turn = Some(gameroom.players[player_idx].id);
                 turn_timer = gameroom.state.turn_duration as f32;
                 gameroom.broadcast(
                     PlayerMessage::Turn { player_id: gameroom.players[player_idx].id }
@@ -245,13 +275,17 @@ async fn handle_step_betting_round(
                 let tick_start = tokio::time::Instant::now();
                 gameroom_mutex.lock().await.broadcast(PlayerMessage::Timer { time: turn_timer }).await;
 
-                let tick_end = tick_start + Duration::from_secs(1);
+                let tick_end = tick_start + Duration::from_secs(10);
                 loop {
                     let remaining = tick_end.saturating_duration_since(tokio::time::Instant::now());
                     if remaining.is_zero() { break; }
-                    match tokio::time::timeout(remaining, &mut notification_receiver).await {
-                        Ok(_) => {},
-                        Err(_) => break,
+
+                    match tokio::time::timeout(remaining,notification_receiver.recv()).await.unwrap_or(None) {
+                        Some(notif) => {
+                            print!("State loop received notification: {}", notif.content);
+                            break;
+                        },
+                        None => break,
                     }
                 }
 
@@ -379,7 +413,9 @@ async fn handle_step_showdown(
 
             gameroom.state.bet_base = 0;
         },
-        Err(err) => {}
+        Err(err) => {
+            println!("Error comparing hands: {:?}", err);
+        },
     }
 }
 
@@ -387,7 +423,7 @@ async fn handle_poker_step(
     step: PokerStep,
     // gameroom: &mut GameRoom,
     gameroom_mutex: Arc<Mutex<GameRoom>>,
-    mut notification_receiver: &mut oneshot::Receiver<GameRoomStateNotification>
+    mut notification_receiver: &mut mpsc::Receiver<GameRoomStateNotification>
 ) {
     for player in gameroom_mutex.lock().await.players.iter_mut() {
         player.state.action = PlayerGameAction::None;
@@ -439,15 +475,18 @@ const STANDARD_POKER_STEPS: [PokerStep; 10] = [
 async fn gameroom_message_loop(
     gameroom: Arc<Mutex<GameRoom>>,
     mut receiver: mpsc::Receiver<GameRoomMessage>,
-    mut notification_sender: oneshot::Sender<GameRoomStateNotification>
+    mut notification_sender: mpsc::Sender<GameRoomStateNotification>
 ) {
     while let Some(message) = receiver.recv().await {
-        gameroom.lock().await.handle_gameroom_message(message).await;
+        gameroom.lock().await.handle_gameroom_message(
+            message,
+            &mut notification_sender
+        ).await;
     }
 }
 async fn gameroom_state_loop(
     gameroom: Arc<Mutex<GameRoom>>,
-    mut notification_receiver: oneshot::Receiver<GameRoomStateNotification>
+    mut notification_receiver: mpsc::Receiver<GameRoomStateNotification>
 ) {
     loop {
         {
@@ -510,7 +549,7 @@ impl GameRoomHandle {
             GameRoom::new(GameType::TexasHoldemPoker)
         ));
 
-        let (notif_sender, notif_receiver) = oneshot::channel();
+        let (notif_sender, notif_receiver) = mpsc::channel(10);
 
         tokio::spawn(gameroom_message_loop(gameroom_mutex.clone(), receiver, notif_sender));
         tokio::spawn(gameroom_state_loop(gameroom_mutex, notif_receiver));
