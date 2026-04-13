@@ -1,6 +1,13 @@
 use crate::core::card::{ Suit, Rank, Card, Owner };
-use crate::core::hand::{ evaluate_hand, evaluate_hand_omaha, show_hand, compare_hands, HandCompare };
+use crate::core::hand::{ evaluate_hand, evaluate_hand_omaha, compare_hands, HandCompare };
 use crate::core::game::GameType;
+
+fn show_hand(hand: &[Card]) {
+    for card in hand {
+        print!("{}/ ", card);
+    }
+    print!("\n");
+}
 
 pub fn hand_evaluation_demo() {
      let mut hand = vec![

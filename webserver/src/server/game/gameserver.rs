@@ -1,3 +1,4 @@
+use crate::core::game::GameType;
 use crate::server::game::gameroom::GameRoomHandle;
 use tokio::sync::{mpsc, oneshot};
 use tokio;
@@ -18,8 +19,8 @@ impl GameServer {
         }
     }
 
-    async fn handle_start_gameroom(&mut self) {
-        self.gameroom_handlers.push(GameRoomHandle::new().await);
+    async fn handle_start_gameroom(&mut self, game_type: GameType) {
+        self.gameroom_handlers.push(GameRoomHandle::new(game_type).await);
     }
 
     async fn handle_join_player(&mut self, websocket: WebSocket, room_id: uuid::Uuid) {
@@ -48,7 +49,7 @@ pub struct GameRoomDTO {
 }
 
 pub enum GameServerMessage {
-    GameRoomStart,
+    GameRoomStart { game_type: GameType },
     PlayerJoin { websocket: WebSocket, room_id: uuid::Uuid },
     ListGameRooms { respond_to: oneshot::Sender<Vec<GameRoomDTO>> }
 }
@@ -76,15 +77,15 @@ impl GameServerHandle {
         let _ = self.sender.send(GameServerMessage::PlayerJoin { websocket, room_id }).await;
     }
 
-    pub async fn gameroom_start(&self) {
-        let _ = self.sender.send(GameServerMessage::GameRoomStart).await;
+    pub async fn gameroom_start(&self, game_type: GameType) {
+        let _ = self.sender.send(GameServerMessage::GameRoomStart { game_type }).await;
     }
 }
 
 async fn gameserver_message_recv_loop(mut gameserver: GameServer) {
     while let Some(message) = gameserver.receiver.recv().await {
         match message {
-            GameServerMessage::GameRoomStart => gameserver.handle_start_gameroom().await,
+            GameServerMessage::GameRoomStart { game_type } => gameserver.handle_start_gameroom(game_type).await,
             GameServerMessage::PlayerJoin { websocket, room_id } => gameserver.handle_join_player(websocket, room_id).await,
             GameServerMessage::ListGameRooms { respond_to } => gameserver.handle_list_gamerooms(respond_to)
         }

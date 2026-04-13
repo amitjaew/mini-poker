@@ -5,12 +5,13 @@ use axum::{
     Router,
 };
 
-use crate::server::game::gameserver::GameServerHandle;
+use crate::{core::game::GameType, server::game::gameserver::GameServerHandle};
 
 
 pub async fn gameserver_demo() {
     let gameserver_handle = GameServerHandle::new();
-    gameserver_handle.gameroom_start().await;
+    let game_type = GameType::TexasHoldemPoker;
+    gameserver_handle.gameroom_start(game_type).await;
 
     let rooms = gameserver_handle.list_gamerooms().await;
     for room in rooms { println!("room: {}", room.id); };

@@ -5,13 +5,6 @@ use std::cmp::{min, max};
 use std::fmt::{ Display, Formatter };
 use std::result::Result;
 
-pub fn show_hand(hand: &[Card]) {
-    for card in hand {
-        print!("{}/ ", card);
-    }
-    print!("\n");
-}
-
 #[derive(Clone, Copy)]
 pub enum HandType {
     HighCard = 0,

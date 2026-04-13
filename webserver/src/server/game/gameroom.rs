@@ -457,10 +457,10 @@ pub struct GameRoomHandle {
 }
 
 impl GameRoomHandle {
-    pub async fn new() -> Self {
+    pub async fn new(game_type: GameType) -> Self {
         let (sender, receiver) = mpsc::channel(100);
         let gameroom_mutex = Arc::new(Mutex::new(
-            GameRoom::new(GameType::TexasHoldemPoker)
+            GameRoom::new(game_type)
         ));
 
         let (notif_sender, notif_receiver) = mpsc::channel(10);
