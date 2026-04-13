@@ -10,7 +10,7 @@ use uuid::Uuid;
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 
-use crate::core::gameroom::{GameRoomMessage, PlayerPayload};
+use crate::server::game::gameroom::{GameRoomMessage, PlayerPayload};
 
 pub struct Player {
     pub id: uuid::Uuid,
@@ -143,7 +143,7 @@ async fn player_message_recv_loop(
             },
             Err(_) => {
                 println!("Player {}: No message received within {} seconds", player_id, REFRESH_TIMEOUT);
-                continue; // continue the loop
+                continue;
             }
         }
     }
@@ -190,12 +190,8 @@ async fn player_socket_recv_loop(
             Ok(Some(Err(err))) => {
                 eprintln!("Player inbound socket error: {}", err);
             },
-            Ok(None) => {
-
-            },
-            Err(_err) => {
-
-            }
+            Ok(None) => {},
+            Err(_err) => {}
         }
     }
 

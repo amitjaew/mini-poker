@@ -210,15 +210,15 @@ This estimates asymmetric delay and server processing overhead. Useful for diagn
 
 ### Server (`webserver/src/`)
 
-- [ ] `Cargo.toml` — add `serde = { version = "1", features = ["derive"] }` and `serde_json = "1"`
-- [ ] `player.rs` — replace `PlayerMessage::GameRoomPayload { content: String }` with typed variants: `Timer`, `TurnStart`, `ActionError`, `Pong`, `TerminateSession`
-- [ ] `player.rs` — serialize each variant to JSON in `player_message_recv_loop`
-- [ ] `player.rs` — parse inbound JSON into `PlayerGameAction` in `player_socket_recv_loop`, send `GameRoomMessage::PlayerAction`
+- [x] `Cargo.toml` — add `serde = { version = "1", features = ["derive"] }` and `serde_json = "1"`
+- [x] `player.rs` — replace `PlayerMessage::GameRoomPayload { content: String }` with typed variants: `Timer`, `TurnStart`, `ActionError`, `Pong`, `TerminateSession`
+- [x] `player.rs` — serialize each variant to JSON in `player_message_recv_loop`
+- [x] `player.rs` — parse inbound JSON into `PlayerGameAction` in `player_socket_recv_loop`, send `GameRoomMessage::PlayerAction`
 - [ ] `player.rs` — handle `ping` in `player_socket_recv_loop`, respond with `pong` immediately
-- [ ] `gameroom.rs` — derive `Deserialize` on `PlayerGameAction`, change `Raise(u32)` to `Raise { amount: u32 }`
-- [ ] `gameroom.rs` — add `GameRoomMessage::PlayerAction { action: PlayerGameAction, from: uuid::Uuid }` variant, remove `PlayerPayload`
-- [ ] `gameroom.rs` — update `handle_gameroom_message` to match `PlayerAction` and assign `player.state.action`
-- [ ] `gameroom.rs` — replace `PlayerMessage::GameRoomPayload` send sites with typed variants
+- [x] `gameroom.rs` — derive `Deserialize` on `PlayerGameAction`, change `Raise(u32)` to `Raise { amount: u32 }`
+- [x] `gameroom.rs` — add `GameRoomMessage::PlayerAction { action: PlayerGameAction, from: uuid::Uuid }` variant, remove `PlayerPayload`
+- [x] `gameroom.rs` — update `handle_gameroom_message` to match `PlayerAction` and assign `player.state.action`
+- [x] `gameroom.rs` — replace `PlayerMessage::GameRoomPayload` send sites with typed variants
 
 ### Client
 

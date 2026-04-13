@@ -1,4 +1,4 @@
-use crate::core::gameroom::GameRoomHandle;
+use crate::server::game::gameroom::GameRoomHandle;
 use tokio::sync::{mpsc, oneshot};
 use tokio;
 use uuid::{self, Uuid};
@@ -9,6 +9,7 @@ struct GameServer {
     gameroom_handlers: Vec<GameRoomHandle>,
     receiver: mpsc::Receiver<GameServerMessage>
 }
+
 impl GameServer {
     fn new(receiver: mpsc::Receiver<GameServerMessage>) -> Self {
         Self {
@@ -34,7 +35,7 @@ impl GameServer {
     }
 
     fn handle_list_gamerooms(&self, respond_to: oneshot::Sender<Vec<GameRoomDTO>>) {
-        let gameroom_dtos  = self.gameroom_handlers.iter().map(
+        let gameroom_dtos = self.gameroom_handlers.iter().map(
             |game_room_handle| GameRoomDTO { id: game_room_handle.id.clone() }
         ).collect();
         let _ = respond_to.send(gameroom_dtos);
@@ -45,6 +46,7 @@ impl GameServer {
 pub struct GameRoomDTO {
     pub id: uuid::Uuid
 }
+
 pub enum GameServerMessage {
     GameRoomStart,
     PlayerJoin { websocket: WebSocket, room_id: uuid::Uuid },

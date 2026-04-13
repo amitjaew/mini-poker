@@ -5,9 +5,9 @@ use axum::extract::ws::WebSocket;
 use uuid::Uuid;
 use std::sync::Arc;
 use std::time::Duration;
-use crate::core::game::{GameType};
+use crate::core::game::GameType;
 use crate::core::hand::{ compare_hands, HandCompare };
-use crate::core::player::{ PlayerMessage, Player };
+use crate::server::game::player::{ PlayerMessage, Player, PlayerWarningType };
 use crate::core::card::{ Card, DECK };
 use rand;
 use rand::seq::SliceRandom;
@@ -99,14 +99,13 @@ impl GameRoom {
         };
 
         Self {
-            // id: uuid::Uuid::new_v4(), //(unneeded for now)
             players,
             state,
             game_type,
             min_bet: 1
-            //rng: rand::rng()
         }
     }
+
     async fn handle_gameroom_message(
         &mut self, message: GameRoomMessage,
         notification_sender: &mut mpsc::Sender<GameRoomStateNotification>
@@ -134,12 +133,11 @@ impl GameRoom {
                         );
                     }
                 }
-
             },
             GameRoomMessage::PlayerPayload { from, payload } => {
                 println!("Gameroom received {:?} from Player {}", payload, from);
 
-                let mut _player = self.players.iter_mut().find(|player| player.id == from );
+                let mut _player = self.players.iter_mut().find(|player| player.id == from);
                 if _player.is_none() {
                     return;
                 }
@@ -181,9 +179,7 @@ enum PokerStep {
     BettingRound
 }
 
-async fn handle_step_blind(
-    gameroom: &mut GameRoom
-) {
+async fn handle_step_blind(gameroom: &mut GameRoom) {
     let mut rng = rand::rng();
     gameroom.state.deck.shuffle(&mut rng);
     gameroom.state.community_cards.clear();
@@ -198,22 +194,16 @@ async fn handle_step_blind(
     gameroom.state.big_blind_idx = (small_blind_idx + 1) % n_players as u8;
 
     match gameroom.players.get_mut(small_blind_idx as usize) {
-        Some(player) => {
-            player.state.bet = gameroom.min_bet;
-        },
+        Some(player) => { player.state.bet = gameroom.min_bet; },
         None => {}
     }
     match gameroom.players.get_mut(gameroom.state.big_blind_idx as usize) {
-        Some(player) => {
-            player.state.bet = 2 * gameroom.min_bet;
-        },
+        Some(player) => { player.state.bet = 2 * gameroom.min_bet; },
         None => {}
     }
 }
 
-async fn handle_step_preflop(
-    gameroom: &mut GameRoom
-) {
+async fn handle_step_preflop(gameroom: &mut GameRoom) {
     gameroom.state.dealt_card_offset = 0;
 
     for player in gameroom.players.iter_mut() {
@@ -228,9 +218,7 @@ async fn handle_step_preflop(
     }
 }
 
-async fn handle_step_flop(
-    gameroom: &mut GameRoom
-) {
+async fn handle_step_flop(gameroom: &mut GameRoom) {
     for i in 0..3 {
         gameroom.state.community_cards.push(
             gameroom.state.deck[gameroom.state.dealt_card_offset + i]
@@ -239,11 +227,9 @@ async fn handle_step_flop(
     gameroom.state.dealt_card_offset += 3;
 }
 
-async fn handle_step_deal_player_card(
-    gameroom: &mut GameRoom
-) {
+async fn handle_step_deal_player_card(gameroom: &mut GameRoom) {
     gameroom.state.community_cards.push(
-            gameroom.state.deck[gameroom.state.dealt_card_offset]
+        gameroom.state.deck[gameroom.state.dealt_card_offset]
     );
     gameroom.state.dealt_card_offset += 1;
 }
@@ -260,7 +246,6 @@ async fn handle_step_betting_round(
         }
 
         for player_idx in 0..n_players {
-        // for player in gameroom.players.iter_mut() {
             let mut turn_timer: f32;
             {
                 let mut gameroom = gameroom_mutex.lock().await;
@@ -274,7 +259,6 @@ async fn handle_step_betting_round(
                 ).await;
             }
 
-
             while turn_timer > 0.0 {
                 let tick_start = tokio::time::Instant::now();
                 gameroom_mutex.lock().await.broadcast(PlayerMessage::Timer { time: turn_timer }).await;
@@ -284,7 +268,7 @@ async fn handle_step_betting_round(
                     let remaining = tick_end.saturating_duration_since(tokio::time::Instant::now());
                     if remaining.is_zero() { break; }
 
-                    match tokio::time::timeout(remaining,notification_receiver.recv()).await.unwrap_or(None) {
+                    match tokio::time::timeout(remaining, notification_receiver.recv()).await.unwrap_or(None) {
                         Some(notif) => {
                             print!("State loop received notification: {}", notif.content);
                             break;
@@ -292,7 +276,6 @@ async fn handle_step_betting_round(
                         None => break,
                     }
                 }
-
 
                 {
                     let mut gameroom = gameroom_mutex.lock().await;
@@ -313,29 +296,16 @@ async fn handle_step_betting_round(
                                     player.state.bet = bet_base;
                                 },
                                 PlayerGameAction::Check => {
-                                    if player.state.bet == bet_base {
-                                    }
-                                    else {
-                                        // Cannot Check if bet base changed
+                                    if player.state.bet != bet_base {
                                         is_action = false;
-                                        // let warning = PlayerMessage::GameRoomPayload { content: "Error".to_string() };
                                         let warning = PlayerMessage::Warning {
-                                            warning_type: super::player::PlayerWarningType::InvalidAction,
+                                            warning_type: PlayerWarningType::InvalidAction,
                                             message: "Cannot check".to_owned()
                                         };
                                         let _ = player.sender.send(warning).await;
                                     }
                                 },
                                 PlayerGameAction::Raise(raise) => {
-                                    // TODO 1: Manage raise policy handling:
-                                    //  * no limit: No limit is applied
-                                    //  * limit: Raise is fixed amount
-                                    //  * pot limit: Raise is capped to pot
-                                    //
-                                    // TODO 2: Re-raise counting and policy handling
-                                    // * no limit: Re raise unlimitetd
-                                    // * limit: 4 bet cap
-                                    // * pot limit: unlimited
                                     bet_base_update += raise;
                                     player.state.bet += bet_base_update;
                                 }
@@ -378,11 +348,9 @@ async fn handle_step_betting_round(
     }
 }
 
-async fn handle_step_showdown(
-    gameroom: &mut GameRoom
-) {
+async fn handle_step_showdown(gameroom: &mut GameRoom) {
     let hands: Vec<Vec<Card>> = gameroom.players.iter().map(
-        |player|  player.state.dealt_cards.iter()
+        |player| player.state.dealt_cards.iter()
             .chain(gameroom.state.community_cards.iter())
             .map(|card| card.clone()).collect()
     ).collect();
@@ -393,28 +361,21 @@ async fn handle_step_showdown(
         Ok(result) => {
             match result {
                 HandCompare::Tie(tied_indexes) => {
-                    // handle tie between player indexes
                     let divided_amount = bet_sum / tied_indexes.len() as u32;
-
                     for player_idx in tied_indexes {
                         match gameroom.players.get_mut(player_idx) {
-                            Some(player) => {
-                                player.state.funds += divided_amount;
-                            },
+                            Some(player) => { player.state.funds += divided_amount; },
                             None => {}
                         }
                     }
                 },
                 HandCompare::Winner(winner_index) => {
                     match gameroom.players.get_mut(winner_index) {
-                        Some(player) => {
-                            player.state.funds += bet_sum;
-                        },
+                        Some(player) => { player.state.funds += bet_sum; },
                         None => {}
                     }
                 }
             }
-
             gameroom.state.bet_base = 0;
         },
         Err(err) => {
@@ -425,40 +386,21 @@ async fn handle_step_showdown(
 
 async fn handle_poker_step(
     step: PokerStep,
-    // gameroom: &mut GameRoom,
     gameroom_mutex: Arc<Mutex<GameRoom>>,
-    mut notification_receiver: &mut mpsc::Receiver<GameRoomStateNotification>
+    notification_receiver: &mut mpsc::Receiver<GameRoomStateNotification>
 ) {
     for player in gameroom_mutex.lock().await.players.iter_mut() {
         player.state.action = PlayerGameAction::None;
     }
     match step {
-        PokerStep::Blind => {
-            let mut gameroom = gameroom_mutex.lock().await;
-            handle_step_blind(&mut gameroom).await;
-        },
-        PokerStep::PreFlop => {
-            let mut gameroom = gameroom_mutex.lock().await;
-            handle_step_preflop(&mut gameroom).await;
-        },
-        PokerStep::Flop => {
-            let mut gameroom = gameroom_mutex.lock().await;
-            handle_step_flop(&mut gameroom).await;
-        },
-        PokerStep::Turn => {
-            let mut gameroom = gameroom_mutex.lock().await;
-            handle_step_deal_player_card(&mut gameroom).await;
-        },
-        PokerStep::River => {
-            let mut gameroom = gameroom_mutex.lock().await;
-            handle_step_deal_player_card(&mut gameroom).await;
-        },
-        PokerStep::Showdown => {
-            let mut gameroom = gameroom_mutex.lock().await;
-            handle_step_showdown(&mut gameroom).await;
-        },
+        PokerStep::Blind    => { handle_step_blind(&mut *gameroom_mutex.lock().await).await; },
+        PokerStep::PreFlop  => { handle_step_preflop(&mut *gameroom_mutex.lock().await).await; },
+        PokerStep::Flop     => { handle_step_flop(&mut *gameroom_mutex.lock().await).await; },
+        PokerStep::Turn     => { handle_step_deal_player_card(&mut *gameroom_mutex.lock().await).await; },
+        PokerStep::River    => { handle_step_deal_player_card(&mut *gameroom_mutex.lock().await).await; },
+        PokerStep::Showdown => { handle_step_showdown(&mut *gameroom_mutex.lock().await).await; },
         PokerStep::BettingRound => {
-            handle_step_betting_round(gameroom_mutex, &mut notification_receiver).await;
+            handle_step_betting_round(gameroom_mutex, notification_receiver).await;
         }
     }
 }
@@ -531,7 +473,7 @@ impl GameRoomHandle {
         }
     }
 
-    pub async fn handle_player_connection (&self, websocket: WebSocket, player_id: Uuid) {
+    pub async fn handle_player_connection(&self, websocket: WebSocket, player_id: Uuid) {
         let (player_sender, player_receiver) = mpsc::channel(10);
         let gameroom_sender = self.sender.clone();
 
@@ -542,7 +484,7 @@ impl GameRoomHandle {
             websocket
         );
         let _ = self.sender.send(
-            GameRoomMessage::PlayerJoin{
+            GameRoomMessage::PlayerJoin {
                 id: player.id.clone(),
                 sender: player_sender
             }
