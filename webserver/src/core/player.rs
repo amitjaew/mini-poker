@@ -18,7 +18,7 @@ pub struct Player {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-struct WinnerPayload {
+pub struct WinnerPayload {
     winner_id: String,
     prize: u32
 }
