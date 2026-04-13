@@ -57,8 +57,6 @@ fn get_straight(ranks: &Vec<u8>) -> Option<Vec<u8>> {
             let mut scale = Vec::with_capacity(5);
             let base = ranks[i+1] + 4;
             for j in 0..5 { scale.push(base - j); }
-
-            for j in 0..5 { print!("{} ", scale[j]); }
             return Some(scale);
         }
     }
@@ -75,12 +73,11 @@ fn get_straight(ranks: &Vec<u8>) -> Option<Vec<u8>> {
     return None;
 }
 
-pub fn evaluate_hand(hand: &mut Vec<Card>) -> Result<(HandType, Vec<u8>), &'static str> {
+pub fn evaluate_hand(hand: &mut Vec<Card>) -> Result<(HandType, [u8; 5]), &'static str> {
     hand.sort();
     hand.reverse();
 
-    let mut sorted_card_rank: Vec<u8> = Vec::with_capacity(5);
-    for _ in 0..5 { sorted_card_rank.push(0); }
+    let mut sorted_card_rank = [0u8; 5];
 
     let mut is_flush = false;
     let mut is_straight = false;
@@ -89,12 +86,10 @@ pub fn evaluate_hand(hand: &mut Vec<Card>) -> Result<(HandType, Vec<u8>), &'stat
     let mut is_three_of_kind = false;
     let mut is_two_pair = false;
     let mut is_pair = false;
-    let mut suit_count = Vec::with_capacity(4);
+    let mut suit_count = [0u8; 4];
 
     let mut pair_rank: u8 = 0;
     let mut three_rank: u8 = 0;
-
-    for _ in 0..4 { suit_count.push(0); }
 
     // Flush check
     for i in 0..hand.len() {
@@ -129,8 +124,7 @@ pub fn evaluate_hand(hand: &mut Vec<Card>) -> Result<(HandType, Vec<u8>), &'stat
         return Ok((HandType::StraightFlush, sorted_card_rank));
     }
 
-    let mut card_count: Vec<u8> = Vec::with_capacity(13);
-    for _ in 0..13 { card_count.push(0); }
+    let mut card_count = [0u8; 13];
     for i in 0..hand.len() { card_count[hand[i].rank as usize] += 1; }
 
     for i in (0..card_count.len()).rev() {
@@ -247,7 +241,7 @@ pub fn evaluate_hand(hand: &mut Vec<Card>) -> Result<(HandType, Vec<u8>), &'stat
     }
 }
 
-pub fn evaluate_hand_omaha(hand: &[Card]) -> Result<(HandType, Vec<u8>), &'static str> {
+pub fn evaluate_hand_omaha(hand: &[Card]) -> Result<(HandType, [u8; 5]), &'static str> {
     let player_cards: Vec<Card> = hand.iter().filter(|c| c.owner == Owner::Player).cloned().collect();
     let community_cards: Vec<Card> = hand.iter().filter(|c| c.owner == Owner::Community).cloned().collect();
 
@@ -264,7 +258,7 @@ pub enum HandCompare {
 }
 
 pub fn compare_hands(hands: Vec<Vec<Card>>, game_type: GameType) -> Result<HandCompare, &'static str> {
-    let mut hand_results: Vec<(HandType, Vec<u8>)> = Vec::with_capacity(hands.len());
+    let mut hand_results: Vec<(HandType, [u8; 5])> = Vec::with_capacity(hands.len());
 
     for mut hand in hands.into_iter() {
         match game_type {
