@@ -12,9 +12,8 @@ use serde::{Serialize, Deserialize};
 
 use crate::server::game::gameroom::{GameRoomMessage, PlayerPayload};
 
-pub struct Player {
+pub struct PlayerSession {
     pub id: uuid::Uuid,
-    active: Arc<Mutex<bool>>
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -28,6 +27,10 @@ pub struct WinnerPayload {
 pub enum PlayerWarningType {
     Debug,
     InvalidAction
+}
+#[derive(Serialize, Deserialize, Clone)]
+pub struct PingData {
+    pub timer: f32
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -43,42 +46,20 @@ pub enum PlayerMessage {
         warning_type: PlayerWarningType,
         message: String
     },
+    Ping {
+        data: PingData,
+        server_ts: u64,
+    },
+    PongAck {
+        server_ts: u64,
+        client_ts: u64,
+        server_ack_ts: u64
+    },
     TerminateSession
 }
 
-impl Player {
+impl PlayerSession {
     pub fn new(
-        sender: mpsc::Sender<GameRoomMessage>,
-        receiver: mpsc::Receiver<PlayerMessage>,
-        socket: WebSocket
-    ) -> Self {
-        let (socket_sender, socket_receiver) = socket.split();
-        let id = uuid::Uuid::new_v4();
-        let active = Arc::new(Mutex::new(true));
-        tokio::spawn(
-            player_message_recv_loop(
-                id.clone(),
-                receiver,
-                socket_sender,
-                active.clone()
-            )
-        );
-        tokio::spawn(
-            player_socket_recv_loop(
-                id.clone(),
-                socket_receiver,
-                sender,
-                active.clone()
-            )
-        );
-
-        Self {
-            id: id.clone(),
-            active
-        }
-    }
-
-    pub fn from_id(
         id: Uuid,
         sender: mpsc::Sender<GameRoomMessage>,
         receiver: mpsc::Receiver<PlayerMessage>,
@@ -103,10 +84,7 @@ impl Player {
             )
         );
 
-        Self {
-            id: id.clone(),
-            active
-        }
+        Self { id: id.clone() }
     }
 }
 

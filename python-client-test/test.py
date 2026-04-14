@@ -1,6 +1,7 @@
 import asyncio
 import json
 import random
+import time
 
 import websockets
 from websockets.exceptions import ConnectionClosedOK
@@ -18,6 +19,9 @@ def random_action():
         action = {"type": "raise", "amount": random.randint(50, 500)}
     return json.dumps(action)
 
+def now_ms() -> int:
+    return int(time.time() * 1000)
+
 async def send_actions(websocket):
     while True:
         await asyncio.sleep(2)
@@ -27,7 +31,32 @@ async def send_actions(websocket):
 
 async def recv_messages(websocket):
     async for message in websocket:
-        print(f"Received: {message}")
+        try:
+            data = json.loads(message)
+        except json.JSONDecodeError:
+            print(f"Received (non-JSON): {message}")
+            continue
+
+        msg_type = data.get("type")
+
+        if msg_type == "ping":
+            server_ts = data.get("server_ts", 0)
+            client_ts = now_ms()
+            pong = json.dumps({"type": "pong", "client_ts": client_ts, "server_ts": server_ts})
+            await websocket.send(pong)
+            timer = data.get("data", {}).get("timer", "?")
+            print(f"Ping (timer={timer}, server_ts={server_ts}) -> Pong sent (client_ts={client_ts})")
+
+        elif msg_type == "pong_ack":
+            s_ts   = data.get("server_ts", 0)
+            c_ts   = data.get("client_ts", 0)
+            ack_ts = data.get("server_ack_ts", 0)
+            rtt    = now_ms() - c_ts
+            trip   = ack_ts - s_ts   # server processing time
+            print(f"PongAck: RTT={rtt}ms, server_processing={trip}ms")
+
+        else:
+            print(f"Received: {message}")
 
 async def test_client():
     uri = "ws://localhost:3000/ws"

@@ -4,10 +4,10 @@ use tokio;
 use axum::extract::ws::WebSocket;
 use uuid::Uuid;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::core::game::GameType;
 use crate::core::hand::{ compare_hands, HandCompare };
-use crate::server::game::player::{ PlayerMessage, Player, PlayerWarningType };
+use crate::server::game::player::{ PingData, PlayerMessage, PlayerSession, PlayerWarningType };
 use crate::core::card::{ Card, DECK };
 use rand;
 use rand::seq::SliceRandom;
@@ -35,9 +35,7 @@ impl GameRoom {
 }
 
 struct GameRoomState {
-    step: u32,
     deck: [Card; 52],
-    turn_timer: u16,
     turn_duration: u16,
     community_cards: Vec<Card>,
     big_blind_idx: u8,
@@ -48,7 +46,6 @@ struct GameRoomState {
 
 #[derive(Clone)]
 struct GameRoomPlayerState {
-    is_playing: bool,
     is_betting: bool,
     dealt_cards: Vec<Card>,
     bet: u32,
@@ -71,7 +68,11 @@ pub enum PlayerPayload {
     Fold,
     Check,
     Call,
-    Raise { amount: u32 }
+    Raise { amount: u32 },
+    Pong {
+        client_ts: u64,
+        server_ts: u64
+    }
 }
 
 pub enum GameRoomMessage {
@@ -87,11 +88,9 @@ impl GameRoom {
     fn new(game_type: GameType) -> Self {
         let players = Vec::new();
         let state = GameRoomState {
-            step: 0,
             deck: DECK,
             community_cards: Vec::new(),
             big_blind_idx: 0,
-            turn_timer: 0,
             turn_duration: 10,
             dealt_card_offset: 0,
             bet_base: 0,
@@ -122,7 +121,6 @@ impl GameRoom {
                                 id,
                                 sender,
                                 state: GameRoomPlayerState {
-                                    is_playing: false,
                                     is_betting: false,
                                     dealt_cards: Vec::new(),
                                     bet: 0,
@@ -146,23 +144,43 @@ impl GameRoom {
                 match payload {
                     PlayerPayload::Fold => {
                         player.state.action = PlayerGameAction::Fold;
+                        _ = notification_sender.send(
+                            GameRoomStateNotification { content: "player updated".to_string() }
+                        ).await;
                     },
                     PlayerPayload::Call => {
                         player.state.action = PlayerGameAction::Call;
+                        _ = notification_sender.send(
+                            GameRoomStateNotification { content: "player updated".to_string() }
+                        ).await;
                     },
                     PlayerPayload::Check => {
                         player.state.action = PlayerGameAction::Check;
+                        _ = notification_sender.send(
+                            GameRoomStateNotification { content: "player updated".to_string() }
+                        ).await;
                     },
                     PlayerPayload::Raise { amount } => {
                         player.state.action = PlayerGameAction::Raise(amount);
-                    }
-                }
+                        _ = notification_sender.send(
+                            GameRoomStateNotification { content: "player updated".to_string() }
+                        ).await;
+                    },
+                    PlayerPayload::Pong { client_ts, server_ts } => {
+                        let timer = SystemTime::now().duration_since(UNIX_EPOCH);
+                        match timer {
+                            Ok(duration) => {
+                                let server_payload = PlayerMessage::PongAck {
+                                    server_ts,
+                                    client_ts,
+                                    server_ack_ts: duration.as_millis() as u64
+                                };
+                                let _ = player.sender.send(server_payload).await;
+                            },
+                            Err(_) => {}
+                        }
 
-                if  self.state.current_player_turn.is_some() &&
-                    self.state.current_player_turn.unwrap() == player.id {
-                    _ = notification_sender.send(
-                        GameRoomStateNotification { content: "player updated".to_string() }
-                    ).await;
+                    }
                 }
             }
         }
@@ -261,9 +279,21 @@ async fn handle_step_betting_round(
 
             while turn_timer > 0.0 {
                 let tick_start = tokio::time::Instant::now();
-                gameroom_mutex.lock().await.broadcast(PlayerMessage::Timer { time: turn_timer }).await;
 
-                let tick_end = tick_start + Duration::from_secs(10);
+                let timer = SystemTime::now().duration_since(UNIX_EPOCH);
+                match timer {
+                    Ok(duration) => {
+                        gameroom_mutex.lock().await.broadcast(
+                            PlayerMessage::Ping {
+                                data: PingData { timer: turn_timer },
+                                server_ts: duration.as_millis() as u64
+                            }
+                        ).await;
+                    },
+                    Err(_) => {}
+                }
+
+                let tick_end = tick_start + Duration::from_secs(1);
                 loop {
                     let remaining = tick_end.saturating_duration_since(tokio::time::Instant::now());
                     if remaining.is_zero() { break; }
@@ -477,7 +507,7 @@ impl GameRoomHandle {
         let (player_sender, player_receiver) = mpsc::channel(10);
         let gameroom_sender = self.sender.clone();
 
-        let player = Player::from_id(
+        let player = PlayerSession::new(
             player_id,
             gameroom_sender,
             player_receiver,
