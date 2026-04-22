@@ -18,7 +18,7 @@ RD = "\033[31m"
 MG = "\033[35m"
 
 ACTIONS = [
-    {"type": "fold"},
+    # {"type": "fold"},
     {"type": "call"},
     {"type": "check"},
     {"type": "raise", "amount": 0},
@@ -52,10 +52,10 @@ def log_action_sent(action: str):
     extra = f"  amount={data['amount']}" if t == "RAISE" else ""
     print(f"  {YL}>{R} {B}{t}{R}{extra}")
 
-def log_result(winners):
+def log_result(winners: list, prizes: list):
     print(f"\n{B}{MG}== RESULT =={R}")
-    for w in winners:
-        print(f"   {GR}winner{R} {short(w.get('winner_id','?'))}  prize={B}{w.get('prize','?')}{R}")
+    for uid, prize in zip(winners, prizes):
+        print(f"   {GR}winner{R} {short(uid)}  prize={B}{prize}{R}")
 
 def log_warning(warning_type: dict, message: str):
     wt = warning_type.get("type", "?") if isinstance(warning_type, dict) else str(warning_type)
@@ -70,6 +70,16 @@ def log_rtt(rtt: int):
 
 def log_terminate():
     print(f"\n{RD}{B}SESSION TERMINATED{R}")
+
+def log_player_action(player_id: str, action, bet_base: int):
+    if isinstance(action, dict):
+        amount = next(iter(action.values()))
+        name = next(iter(action)).upper()
+        extra = f"  amount={B}{amount}{R}  base={bet_base}"
+    else:
+        name = str(action).upper()
+        extra = f"  base={bet_base}" if name in ("CALL", "CHECK") else ""
+    print(f"  {MG}*{R} {B}{name}{R}  player={short(player_id)}{extra}")
 
 def log_unknown(msg_type: str, raw: str):
     print(f"  {DIM}? [{msg_type}] {raw}{R}")
@@ -122,7 +132,7 @@ async def handle_message(websocket, raw: str, verbose: bool) -> None:
 
     elif msg_type == "result":
         if not verbose:
-            log_result(data.get("winners", []))
+            log_result(data.get("winners", []), data.get("prizes", []))
 
     elif msg_type == "warning":
         if not verbose:
@@ -135,6 +145,14 @@ async def handle_message(websocket, raw: str, verbose: bool) -> None:
     elif msg_type == "terminate_session":
         if not verbose:
             log_terminate()
+
+    elif msg_type == "player_action":
+        if not verbose:
+            log_player_action(
+                data.get("player_id", ""),
+                data.get("action"),
+                data.get("bet_base", 0),
+            )
 
     else:
         if not verbose:
