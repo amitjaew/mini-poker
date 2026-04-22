@@ -28,16 +28,12 @@ pub enum PlayerWarningType {
     Debug,
     InvalidAction
 }
-#[derive(Serialize, Deserialize, Clone)]
-pub struct PingData {
-    pub timer: f32
-}
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlayerMessage {
     Debug { content: String },
-    Turn { player_id: Uuid },
+    Turn { player_id: Uuid, timeout: u64 },
     Timer { time: f32 },
     Result {
         winners: Vec<WinnerPayload>
@@ -47,7 +43,6 @@ pub enum PlayerMessage {
         message: String
     },
     Ping {
-        data: PingData,
         server_ts: u64,
     },
     PongAck {

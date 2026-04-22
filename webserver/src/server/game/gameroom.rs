@@ -2,12 +2,13 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{ Mutex, mpsc };
 use tokio;
 use axum::extract::ws::WebSocket;
+use tokio::time::{Instant};
 use uuid::Uuid;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::core::game::GameType;
 use crate::core::hand::{ compare_hands, HandCompare };
-use crate::server::game::player::{ PingData, PlayerMessage, PlayerSession, PlayerWarningType };
+use crate::server::game::player::{ PlayerMessage, PlayerSession, PlayerWarningType };
 use crate::core::card::{ Card, DECK };
 use rand;
 use rand::seq::SliceRandom;
@@ -41,7 +42,8 @@ struct GameRoomState {
     big_blind_idx: u8,
     dealt_card_offset: usize,
     bet_base: u32,
-    current_player_turn: Option<Uuid>
+    current_player_turn: Option<Uuid>,
+    current_player_timeout: Option<SystemTime>
 }
 
 #[derive(Clone)]
@@ -94,7 +96,8 @@ impl GameRoom {
             turn_duration: 10,
             dealt_card_offset: 0,
             bet_base: 0,
-            current_player_turn: None
+            current_player_turn: None,
+            current_player_timeout: None
         };
 
         Self {
@@ -264,92 +267,77 @@ async fn handle_step_betting_round(
         }
 
         for player_idx in 0..n_players {
-            let mut turn_timer: f32;
+            let timeout_instant: Instant;
+            let timeout_time: SystemTime;
+
             {
                 let mut gameroom = gameroom_mutex.lock().await;
                 let player_is_betting = gameroom.players[player_idx].state.is_betting;
                 if !player_is_betting { continue; }
 
                 gameroom.state.current_player_turn = Some(gameroom.players[player_idx].id);
-                turn_timer = gameroom.state.turn_duration as f32;
+                timeout_instant = Instant::now() + Duration::from_secs(gameroom.state.turn_duration as u64);
+                timeout_time = SystemTime::now() + Duration::from_secs(gameroom.state.turn_duration as u64);
+                gameroom.state.current_player_timeout = Some(timeout_time);
+
                 gameroom.broadcast(
-                    PlayerMessage::Turn { player_id: gameroom.players[player_idx].id }
+                    PlayerMessage::Turn {
+                        player_id: gameroom.players[player_idx].id,
+                        timeout: timeout_time.duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
+                    }
+                ).await;
+                gameroom.broadcast(
+                    PlayerMessage::Ping { server_ts: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64 }
                 ).await;
             }
 
-            while turn_timer > 0.0 {
-                let tick_start = tokio::time::Instant::now();
-
-                let timer = SystemTime::now().duration_since(UNIX_EPOCH);
-                match timer {
-                    Ok(duration) => {
-                        gameroom_mutex.lock().await.broadcast(
-                            PlayerMessage::Ping {
-                                data: PingData { timer: turn_timer },
-                                server_ts: duration.as_millis() as u64
-                            }
-                        ).await;
+            while SystemTime::now() < timeout_time {
+                match tokio::time::timeout_at(timeout_instant, notification_receiver.recv()).await.unwrap_or(None) {
+                    Some(notif) => {
+                        print!("State loop received notification: {}", notif.content);
                     },
-                    Err(_) => {}
+                    None => {},
                 }
 
-                let tick_end = tick_start + Duration::from_secs(1);
-                loop {
-                    let remaining = tick_end.saturating_duration_since(tokio::time::Instant::now());
-                    if remaining.is_zero() { break; }
+                let mut gameroom = gameroom_mutex.lock().await;
+                let bet_base = gameroom.state.bet_base;
+                let mut bet_base_update = gameroom.state.bet_base;
+                let mut is_action = true;
 
-                    match tokio::time::timeout(remaining, notification_receiver.recv()).await.unwrap_or(None) {
-                        Some(notif) => {
-                            print!("State loop received notification: {}", notif.content);
-                            break;
-                        },
-                        None => break,
-                    }
-                }
-
-                {
-                    let mut gameroom = gameroom_mutex.lock().await;
-                    let bet_base = gameroom.state.bet_base;
-                    let mut bet_base_update = gameroom.state.bet_base;
-                    let mut is_action = true;
-
-                    match gameroom.players.get_mut(player_idx) {
-                        Some(player) => {
-                            match player.state.action {
-                                PlayerGameAction::None => {
+                match gameroom.players.get_mut(player_idx) {
+                    Some(player) => {
+                        match player.state.action {
+                            PlayerGameAction::None => {
+                                is_action = false;
+                            },
+                            PlayerGameAction::Fold => {
+                                player.state.is_betting = false;
+                            },
+                            PlayerGameAction::Call => {
+                                player.state.bet = bet_base;
+                            },
+                            PlayerGameAction::Check => {
+                                if player.state.bet != bet_base {
                                     is_action = false;
-                                },
-                                PlayerGameAction::Fold => {
-                                    player.state.is_betting = false;
-                                },
-                                PlayerGameAction::Call => {
-                                    player.state.bet = bet_base;
-                                },
-                                PlayerGameAction::Check => {
-                                    if player.state.bet != bet_base {
-                                        is_action = false;
-                                        let warning = PlayerMessage::Warning {
-                                            warning_type: PlayerWarningType::InvalidAction,
-                                            message: "Cannot check".to_owned()
-                                        };
-                                        let _ = player.sender.send(warning).await;
-                                    }
-                                },
-                                PlayerGameAction::Raise(raise) => {
-                                    bet_base_update += raise;
-                                    player.state.bet += bet_base_update;
+                                    let warning = PlayerMessage::Warning {
+                                        warning_type: PlayerWarningType::InvalidAction,
+                                        message: "Cannot check".to_owned()
+                                    };
+                                    let _ = player.sender.send(warning).await;
                                 }
+                            },
+                            PlayerGameAction::Raise(raise) => {
+                                bet_base_update += raise;
+                                player.state.bet += bet_base_update;
                             }
-                        },
-                        None => { is_action = false; }
-                    }
-                    if is_action {
-                        gameroom.state.bet_base = bet_base_update;
-                        break;
-                    }
+                        }
+                    },
+                    None => { is_action = false; }
                 }
-
-                turn_timer -= tick_start.elapsed().as_secs_f32();
+                if is_action {
+                    gameroom.state.bet_base = bet_base_update;
+                    break;
+                }
             }
 
             {
