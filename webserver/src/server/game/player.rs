@@ -10,16 +10,10 @@ use uuid::Uuid;
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 
-use crate::server::game::gameroom::{GameRoomMessage, PlayerPayload};
+use crate::server::game::gameroom::{GameRoomMessage, PlayerGameAction, PlayerPayload};
 
 pub struct PlayerSession {
     pub id: uuid::Uuid,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct WinnerPayload {
-    winner_id: String,
-    prize: u32
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -35,8 +29,19 @@ pub enum PlayerMessage {
     Debug { content: String },
     Turn { player_id: Uuid, timeout: u64 },
     Timer { time: f32 },
+    PlayerAction {
+        player_id: Uuid,
+        action: PlayerGameAction,
+        bet_base: u32
+    },
+    StateUpdate {
+        active_players: Option<Vec<Uuid>>,
+        current_player_turn: Option<Uuid>,
+        bet_base: Option<u32>
+    },
     Result {
-        winners: Vec<WinnerPayload>
+        winners: Vec<Uuid>,
+        prizes: Vec<u32>
     },
     Warning {
         warning_type: PlayerWarningType,

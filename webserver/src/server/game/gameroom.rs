@@ -55,8 +55,8 @@ struct GameRoomPlayerState {
     funds: u32,
 }
 
-#[derive(Clone)]
-enum PlayerGameAction {
+#[derive(Clone, Serialize, Deserialize)]
+pub enum PlayerGameAction {
     None,
     Fold,
     Check,
@@ -303,9 +303,15 @@ async fn handle_step_betting_round(
                 let bet_base = gameroom.state.bet_base;
                 let mut bet_base_update = gameroom.state.bet_base;
                 let mut is_action = true;
+                let mut pending_broadcast: Option<PlayerMessage> = None;
 
                 match gameroom.players.get_mut(player_idx) {
                     Some(player) => {
+                        pending_broadcast = Some(PlayerMessage::PlayerAction {
+                            player_id: player.id.clone(),
+                            action: player.state.action.clone(),
+                            bet_base: bet_base_update
+                        });
                         match player.state.action {
                             PlayerGameAction::None => {
                                 is_action = false;
@@ -324,6 +330,7 @@ async fn handle_step_betting_round(
                                         message: "Cannot check".to_owned()
                                     };
                                     let _ = player.sender.send(warning).await;
+                                    player.state.action = PlayerGameAction::None;
                                 }
                             },
                             PlayerGameAction::Raise(raise) => {
@@ -336,6 +343,9 @@ async fn handle_step_betting_round(
                 }
                 if is_action {
                     gameroom.state.bet_base = bet_base_update;
+                    if pending_broadcast.is_some() {
+                        gameroom.broadcast(pending_broadcast.unwrap()).await;
+                    }
                     break;
                 }
             }
@@ -367,33 +377,49 @@ async fn handle_step_betting_round(
 }
 
 async fn handle_step_showdown(gameroom: &mut GameRoom) {
-    let hands: Vec<Vec<Card>> = gameroom.players.iter().map(
-        |player| player.state.dealt_cards.iter()
+    let end_players: Vec<usize> = gameroom.players.iter()
+        .enumerate()
+        .filter_map(|(idx, player)| player.state.is_betting.then_some(idx))
+        .collect();
+
+    let hands: Vec<Vec<Card>> = end_players.iter().map(
+        |&idx| gameroom.players[idx].state.dealt_cards.iter()
             .chain(gameroom.state.community_cards.iter())
             .map(|card| card.clone()).collect()
     ).collect();
 
-    let bet_sum: u32 = gameroom.players.iter().map(|player| player.state.bet).sum();
+    let bet_sum: u32 = gameroom.players.iter_mut().map(|player| player.state.bet).sum();
+    let winners: Vec<Uuid>;
+    let prizes: Vec<u32>;
 
     match compare_hands(hands, gameroom.game_type) {
         Ok(result) => {
             match result {
                 HandCompare::Tie(tied_indexes) => {
-                    let divided_amount = bet_sum / tied_indexes.len() as u32;
+                    let divided_amount = if tied_indexes.len() == 0 { 0 } else { bet_sum / tied_indexes.len() as u32 };
+                    winners = end_players.iter()
+                        .filter(|&idx| tied_indexes.contains(idx))
+                        .map(|&idx| gameroom.players[idx].id)
+                        .collect();
+                    prizes = winners.iter().map(|_| divided_amount).collect(); // PENDING FIX: prizes proportional to bet
+
                     for player_idx in tied_indexes {
                         match gameroom.players.get_mut(player_idx) {
-                            Some(player) => { player.state.funds += divided_amount; },
+                            Some(player) => {
+                                player.state.funds += divided_amount;
+                            },
                             None => {}
                         }
                     }
                 },
                 HandCompare::Winner(winner_index) => {
-                    match gameroom.players.get_mut(winner_index) {
-                        Some(player) => { player.state.funds += bet_sum; },
-                        None => {}
-                    }
+                    gameroom.players[end_players[winner_index]].state.funds += bet_sum;
+                    winners = vec![gameroom.players[end_players[winner_index]].id.clone()];
+                    prizes = vec![ bet_sum ];
                 }
             }
+
+            gameroom.broadcast(PlayerMessage::Result { winners, prizes }).await;
             gameroom.state.bet_base = 0;
         },
         Err(err) => {
