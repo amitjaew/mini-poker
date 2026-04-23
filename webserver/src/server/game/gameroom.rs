@@ -286,9 +286,6 @@ async fn handle_step_betting_round(
                         timeout: timeout_time.duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
                     }
                 ).await;
-                gameroom.broadcast(
-                    PlayerMessage::Ping { server_ts: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64 }
-                ).await;
             }
 
             while SystemTime::now() < timeout_time {
@@ -524,6 +521,7 @@ impl GameRoomHandle {
         let player = PlayerSession::new(
             player_id,
             gameroom_sender,
+            player_sender.clone(),
             player_receiver,
             websocket
         );

@@ -1,5 +1,6 @@
-use tokio::sync::{ mpsc, Mutex };
-use tokio::time::{timeout, Duration};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use tokio::sync::{ mpsc };
 use tokio;
 use axum::extract::ws::{ CloseFrame, Message, Utf8Bytes, WebSocket };
 use futures_util::{
@@ -7,7 +8,6 @@ use futures_util::{
    stream::{ StreamExt, SplitSink, SplitStream }
 };
 use uuid::Uuid;
-use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 
 use crate::server::game::gameroom::{GameRoomMessage, PlayerGameAction, PlayerPayload};
@@ -61,26 +61,36 @@ pub enum PlayerMessage {
 impl PlayerSession {
     pub fn new(
         id: Uuid,
-        sender: mpsc::Sender<GameRoomMessage>,
-        receiver: mpsc::Receiver<PlayerMessage>,
+        gameroom_sender: mpsc::Sender<GameRoomMessage>,
+        player_sender: mpsc::Sender<PlayerMessage>,
+        player_receiver: mpsc::Receiver<PlayerMessage>,
         socket: WebSocket,
     ) -> Self {
         let (socket_sender, socket_receiver) = socket.split();
-        let active = Arc::new(Mutex::new(true));
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        // let active = Arc::new(Mutex::new(true));
+
         tokio::spawn(
             player_message_recv_loop(
                 id.clone(),
-                receiver,
+                player_receiver,
                 socket_sender,
-                active.clone()
+                shutdown_tx,
+                shutdown_rx.clone()
             )
         );
         tokio::spawn(
             player_socket_recv_loop(
                 id.clone(),
                 socket_receiver,
-                sender,
-                active.clone()
+                gameroom_sender,
+                shutdown_rx.clone()
+            )
+        );
+        tokio::spawn(
+            player_ping_loop(
+                player_sender,
+                shutdown_rx
             )
         );
 
@@ -92,86 +102,111 @@ async fn player_message_recv_loop(
     player_id: uuid::Uuid,
     mut receiver: mpsc::Receiver<PlayerMessage>,
     mut socket_sender: SplitSink<WebSocket, Message>,
-    active: Arc<Mutex<bool>>
+    shutdown_tx: tokio::sync::watch::Sender<bool>,
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>
 ) {
     loop {
-        if !*active.lock().await { break; }
-        const REFRESH_TIMEOUT: u64 = 1;
-        let result = timeout(Duration::from_secs(REFRESH_TIMEOUT), receiver.recv()).await;
-
-        match result {
-            Ok(Some(message)) => {
-                match message {
-                    PlayerMessage::TerminateSession => {
+        tokio::select! {
+            received = receiver.recv() => {
+                match received {
+                    Some(PlayerMessage::TerminateSession) => {
                         println!("Player {}: Sending Terminate Session Message", player_id);
-
                         let close_payload: CloseFrame = CloseFrame { code: 1000, reason: Utf8Bytes::from("closing") };
                         let _ = socket_sender.send(Message::Close(Some(close_payload))).await;
                     },
-                    _ => {
+                    Some(message) => {
                         let content = serde_json::to_string(&message).unwrap_or(String::new());
                         println!("Player {}: Sending \n{}\n------------------------", player_id, content);
                         let _ = socket_sender.send(Message::text(content)).await;
+                    },
+                    None => {
+                        eprintln!("Player {} connection closed", player_id);
+                        _ = shutdown_tx.send(true);
                     }
                 }
-            },
-            Ok(None) => {
-                eprintln!("Player {} connection closed", player_id);
-                *active.lock().await = false;
-            },
-            Err(_) => {
-                println!("Player {}: No message received within {} seconds", player_id, REFRESH_TIMEOUT);
-                continue;
+            }
+
+            _ = shutdown_rx.changed() => {
+                break;
             }
         }
     }
-
     println!("Closing recv loop for player: {}", player_id);
+}
+
+async fn handle_player_inbound_message(
+    unparsed_message: Message,
+    sender: &mpsc::Sender<GameRoomMessage>,
+    player_id: Uuid
+){
+    match unparsed_message.to_text() {
+        Ok(message) => {
+            println!("Player {} sent message: {}", player_id, message);
+            match serde_json::from_str::<PlayerPayload>(message) {
+                Ok(payload) => {
+                    let _ = sender.send(
+                        GameRoomMessage::PlayerPayload {
+                            payload,
+                            from: player_id
+                        }
+                    ).await;
+                },
+                Err(err) => {
+                    eprintln!("Player {} sent invalid action: {}, {}", player_id, message, err);
+                }
+            }
+        },
+        Err(err) => {
+            eprintln!("Invalid text message: {}", err);
+        }
+    }
 }
 
 async fn player_socket_recv_loop(
     player_id: uuid::Uuid,
     mut socket_receiver: SplitStream<WebSocket>,
     sender: mpsc::Sender<GameRoomMessage>,
-    active: Arc<Mutex<bool>>
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>
 ) {
+
     loop {
-        if !*active.lock().await { break; }
-
-        const REFRESH_TIMEOUT: u64 = 1;
-        let result = timeout(Duration::from_secs(REFRESH_TIMEOUT), socket_receiver.next()).await;
-
-        match result {
-            Ok(Some(Ok(message_unparsed))) => {
-                match message_unparsed.to_text() {
-                    Ok(message) => {
-                        println!("Player {} sent message: {}", player_id, message);
-                        match serde_json::from_str::<PlayerPayload>(message) {
-                            Ok(payload) => {
-                                let _ = sender.send(
-                                    GameRoomMessage::PlayerPayload {
-                                        payload,
-                                        from: player_id
-                                    }
-                                ).await;
-                            },
-                            Err(err) => {
-                                eprintln!("Player {} sent invalid action: {}, {}", player_id, message, err);
-                            }
-                        }
+        tokio::select! {
+            received = socket_receiver.next() => {
+                match received {
+                    Some(Ok(unparsed_message)) => {
+                        handle_player_inbound_message(unparsed_message, &sender, player_id).await;
                     },
-                    Err(err) => {
-                        eprintln!("Invalid text message: {}", err);
+                    Some(Err(err)) => {
+                        eprintln!("Player inbound socket error: {}", err);
                     }
+                    None => {}
                 }
-            },
-            Ok(Some(Err(err))) => {
-                eprintln!("Player inbound socket error: {}", err);
-            },
-            Ok(None) => {},
-            Err(_err) => {}
+            }
+
+            _ = shutdown_rx.changed() => {
+                break;
+            }
         }
     }
-
     println!("Closing socket inbound loop for player {}", player_id);
+}
+
+async fn player_ping_loop(
+    sender: mpsc::Sender<PlayerMessage>,
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>
+) {
+    loop {
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                let payload = PlayerMessage::Ping {
+                    server_ts: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
+                };
+                _ = sender.send(payload).await;
+            }
+
+            _ = shutdown_rx.changed() => {
+                break;
+            }
+        }
+    }
 }
