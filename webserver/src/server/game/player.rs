@@ -10,7 +10,7 @@ use futures_util::{
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 
-use crate::server::game::gameroom::{GameRoomMessage, PlayerGameAction, PlayerPayload};
+use crate::server::game::gameroom::{GameRoomMessage, PlayerGameAction, PlayerPayload, PokerStep};
 
 pub struct PlayerSession {
     pub id: uuid::Uuid,
@@ -26,18 +26,15 @@ pub enum PlayerWarningType {
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlayerMessage {
-    Debug { content: String },
+    Session { player_id: Uuid },
+    BetBase { bet_base: u32 },
+    Step { step: PokerStep },
+    ActivePlayers { players: Vec<Uuid> },
     Turn { player_id: Uuid, timeout: u64 },
-    Timer { time: f32 },
     PlayerAction {
         player_id: Uuid,
         action: PlayerGameAction,
         bet_base: u32
-    },
-    StateUpdate {
-        active_players: Option<Vec<Uuid>>,
-        current_player_turn: Option<Uuid>,
-        bet_base: Option<u32>
     },
     Result {
         winners: Vec<Uuid>,

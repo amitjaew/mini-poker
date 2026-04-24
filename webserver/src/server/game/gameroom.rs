@@ -190,7 +190,9 @@ impl GameRoom {
     }
 }
 
-enum PokerStep {
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum PokerStep {
     Blind,
     PreFlop,
     Flop,
@@ -332,7 +334,7 @@ async fn handle_step_betting_round(
                             },
                             PlayerGameAction::Raise(raise) => {
                                 bet_base_update += raise;
-                                player.state.bet += bet_base_update;
+                                player.state.bet = bet_base_update;
                             }
                         }
                     },
@@ -480,14 +482,14 @@ async fn gameroom_state_loop(
         if gameroom.lock().await.players.len() == 0 { continue; }
         tokio::time::sleep(Duration::from_secs(5)).await;
 
-        for _ in 0..2 {
-            for step in STANDARD_POKER_STEPS {
-                handle_poker_step(
-                    step,
-                    gameroom.clone(),
-                    &mut notification_receiver
-                ).await;
-            }
+        for step in STANDARD_POKER_STEPS {
+            gameroom.lock().await.broadcast(PlayerMessage::Step { step: step.clone() }).await;
+
+            handle_poker_step(
+                step,
+                gameroom.clone(),
+                &mut notification_receiver
+            ).await;
         }
     }
 }
@@ -528,8 +530,9 @@ impl GameRoomHandle {
         let _ = self.sender.send(
             GameRoomMessage::PlayerJoin {
                 id: player.id.clone(),
-                sender: player_sender
+                sender: player_sender.clone()
             }
         ).await;
+        _ = player_sender.send(PlayerMessage::Session { player_id }).await;
     }
 }

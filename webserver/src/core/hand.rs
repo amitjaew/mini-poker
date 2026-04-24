@@ -258,16 +258,16 @@ pub fn compare_hands(hands: Vec<Vec<Card>>, game_type: GameType) -> Result<HandC
             GameType::TexasHoldemPoker => {
                 match evaluate_hand(&mut hand) {
                     Ok(res) => { hand_results.push(res); },
-                    Err(_) => {
-                        return Err("Some error happened while evaluating hand");
+                    Err(err) => {
+                        return Err(err);
                     }
                 }
             },
             GameType::OmahaPoker => {
                 match evaluate_hand_omaha(&mut hand) {
                     Ok(res) => { hand_results.push(res); },
-                    Err(_) => {
-                        return Err("Some error happened while evaluating hand");
+                    Err(err) => {
+                        return Err(err);
                     }
                 }
             }
