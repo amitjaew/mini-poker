@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::core::game::GameType;
 use crate::core::hand::{ compare_hands, HandCompare };
 use crate::server::game::player::{ PlayerMessage, PlayerSession, PlayerWarningType };
-use crate::core::card::{ Card, DECK };
+use crate::core::card::{ Card, DECK, Owner };
 use rand;
 use rand::seq::SliceRandom;
 
@@ -210,6 +210,7 @@ async fn handle_step_blind(gameroom: &mut GameRoom) {
     for player in gameroom.players.iter_mut() {
         player.state.is_betting = true;
         player.state.dealt_cards.clear();
+        player.state.bet = 0;
     }
 
     let n_players = gameroom.players.iter().len() as u8;
@@ -228,16 +229,20 @@ async fn handle_step_blind(gameroom: &mut GameRoom) {
 
 async fn handle_step_preflop(gameroom: &mut GameRoom) {
     gameroom.state.dealt_card_offset = 0;
+    let hole_count = match gameroom.game_type {
+        GameType::TexasHoldemPoker => 2,
+        GameType::OmahaPoker => 4
+    };
 
     for player in gameroom.players.iter_mut() {
         if !player.state.is_betting { continue; }
 
-        for i in 0..2 {
-            player.state.dealt_cards.push(
-                gameroom.state.deck[gameroom.state.dealt_card_offset + i]
-            );
+        for i in 0..hole_count {
+            let mut card = gameroom.state.deck[gameroom.state.dealt_card_offset + i];
+            card.owner = Owner::Player;
+            player.state.dealt_cards.push(card);
         }
-        gameroom.state.dealt_card_offset += 2;
+        gameroom.state.dealt_card_offset += hole_count;
     }
 }
 
@@ -395,20 +400,16 @@ async fn handle_step_showdown(gameroom: &mut GameRoom) {
         Ok(result) => {
             match result {
                 HandCompare::Tie(tied_indexes) => {
-                    let divided_amount = if tied_indexes.len() == 0 { 0 } else { bet_sum / tied_indexes.len() as u32 };
-                    winners = end_players.iter()
-                        .filter(|&idx| tied_indexes.contains(idx))
-                        .map(|&idx| gameroom.players[idx].id)
+                    winners = tied_indexes.iter()
+                        .map(|&idx| gameroom.players[end_players[idx]].id)
                         .collect();
+
+                    let divided_amount = if tied_indexes.len() == 0 { 0 } else { bet_sum / tied_indexes.len() as u32 };
                     prizes = winners.iter().map(|_| divided_amount).collect(); // PENDING FIX: prizes proportional to bet
 
-                    for player_idx in tied_indexes {
-                        match gameroom.players.get_mut(player_idx) {
-                            Some(player) => {
-                                player.state.funds += divided_amount;
-                            },
-                            None => {}
-                        }
+                    for end_player_idx in tied_indexes {
+                        let player_idx = end_players[end_player_idx];
+                        gameroom.players[player_idx].state.funds += divided_amount;
                     }
                 },
                 HandCompare::Winner(winner_index) => {

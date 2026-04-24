@@ -1,5 +1,5 @@
 use crate::core::card::{ Card, Owner, Rank };
-use crate::core::combinations::omaha_hands;
+use crate::core::combinations::{combinations, omaha_hands};
 use crate::core::game::GameType;
 use std::cmp::{min, max};
 use std::fmt::{ Display, Formatter };
@@ -245,6 +245,14 @@ pub fn evaluate_hand_omaha(hand: &[Card]) -> Result<(HandType, [u8; 5]), &'stati
         .ok_or("no valid hand found")
 }
 
+pub fn evaluate_hand_texas_holdem(hand: &[Card]) -> Result<(HandType, [u8; 5]), &'static str> {
+    combinations(hand, 5)
+        .into_iter()
+        .filter_map(|mut five_card_hand| evaluate_hand(&mut five_card_hand).ok())
+        .max_by_key(|(hand_type, ranks)| (*hand_type as u8, ranks.clone()))
+        .ok_or("no valid hand found")
+}
+
 pub enum HandCompare {
     Tie(Vec<usize>),
     Winner(usize)
@@ -256,7 +264,7 @@ pub fn compare_hands(hands: Vec<Vec<Card>>, game_type: GameType) -> Result<HandC
     for mut hand in hands.into_iter() {
         match game_type {
             GameType::TexasHoldemPoker => {
-                match evaluate_hand(&mut hand) {
+                match evaluate_hand_texas_holdem(&mut hand) {
                     Ok(res) => { hand_results.push(res); },
                     Err(err) => {
                         return Err(err);
@@ -295,7 +303,7 @@ pub fn compare_hands(hands: Vec<Vec<Card>>, game_type: GameType) -> Result<HandC
         if score < max_score { continue; }
         if score == max_score { max_score_count += 1; }
         else {
-            max_score_count = 0;
+            max_score_count = 1;
             max_score = score;
             last_winner_index = index;
         }

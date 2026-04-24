@@ -9,8 +9,8 @@ use crate::{core::game::GameType, server::game::gameserver::GameServerHandle};
 
 pub async fn start() {
     let gameserver_handle = GameServerHandle::new();
-    gameserver_handle.gameroom_start(GameType::TexasHoldemPoker).await;
-    // gameserver_handle.gameroom_start(GameType::OmahaPoker).await;
+    // gameserver_handle.gameroom_start(GameType::TexasHoldemPoker).await;
+    gameserver_handle.gameroom_start(GameType::OmahaPoker).await;
 
     let rooms = gameserver_handle.list_gamerooms().await;
     for room in rooms { println!("room: {}", room.id); }
