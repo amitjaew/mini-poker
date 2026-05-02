@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::core::game::GameType;
 use crate::core::hand::{ compare_hands, HandCompare };
-use crate::server::game::player::{ PlayerMessage, PlayerSession, PlayerWarningType };
+use crate::server::game::player::{ CardDealDTO, CardOwnerDTO, CardReveallDTO, HandRevealDTO, PlayerMessage, PlayerSession, PlayerWarningType };
 use crate::core::card::{ Card, DECK, Owner };
 use rand;
 use rand::seq::SliceRandom;
@@ -48,6 +48,7 @@ struct GameRoomState {
 
 #[derive(Clone)]
 struct GameRoomPlayerState {
+    is_playing: bool,
     is_betting: bool,
     dealt_cards: Vec<Card>,
     bet: u32,
@@ -124,6 +125,7 @@ impl GameRoom {
                                 id,
                                 sender,
                                 state: GameRoomPlayerState {
+                                    is_playing: true, // Placeholder
                                     is_betting: false,
                                     dealt_cards: Vec::new(),
                                     bet: 0,
@@ -242,6 +244,13 @@ async fn handle_step_preflop(gameroom: &mut GameRoom) {
             card.owner = Owner::Player;
             player.state.dealt_cards.push(card);
         }
+
+        _ = player.sender.send(PlayerMessage::CardDeal {
+            cards: player.state.dealt_cards.iter()
+                .map(|card| CardDealDTO{ rank: card.rank as u8, suit: card.suit.into() })
+                .collect(),
+            owner: CardOwnerDTO::Player
+        }).await;
         gameroom.state.dealt_card_offset += hole_count;
     }
 }
@@ -252,14 +261,32 @@ async fn handle_step_flop(gameroom: &mut GameRoom) {
             gameroom.state.deck[gameroom.state.dealt_card_offset + i]
         );
     }
+
+    gameroom.broadcast(
+        PlayerMessage::CardDeal {
+        cards: gameroom.state.community_cards.iter()
+            .map(|card| CardDealDTO{ rank: card.rank as u8, suit: card.suit.into() })
+            .collect(),
+        owner: CardOwnerDTO::Community
+    }).await;
     gameroom.state.dealt_card_offset += 3;
 }
 
-async fn handle_step_deal_player_card(gameroom: &mut GameRoom) {
-    gameroom.state.community_cards.push(
-        gameroom.state.deck[gameroom.state.dealt_card_offset]
-    );
-    gameroom.state.dealt_card_offset += 1;
+async fn handle_step_deal_player_card(gameroom: &mut GameRoom, n_cards: usize) {
+    for _ in 0..n_cards {
+        gameroom.state.community_cards.push(
+            gameroom.state.deck[gameroom.state.dealt_card_offset]
+        );
+        gameroom.state.dealt_card_offset += 1;
+    }
+
+    gameroom.broadcast(
+        PlayerMessage::CardDeal {
+        cards: gameroom.state.community_cards.iter().rev().take(n_cards)
+            .map(|card| CardDealDTO{ rank: card.rank as u8, suit: card.suit.into() })
+            .collect(),
+        owner: CardOwnerDTO::Community
+    }).await;
 }
 
 async fn handle_step_betting_round(
@@ -419,7 +446,20 @@ async fn handle_step_showdown(gameroom: &mut GameRoom) {
                 }
             }
 
-            gameroom.broadcast(PlayerMessage::Result { winners, prizes }).await;
+            let player_hands: Vec<HandRevealDTO> = gameroom.players.iter().map(
+                |player| HandRevealDTO{
+                    player_id: player.id.clone(),
+                    cards: player.state.dealt_cards.iter().map(|card| CardReveallDTO{
+                        suit: card.suit.into(),
+                        rank: card.rank as u8,
+                        owner: match card.owner {
+                            Owner::Player => CardOwnerDTO::Player,
+                            Owner::Community => CardOwnerDTO::Community
+                        }
+                    }).collect()
+                }
+            ).collect();
+            gameroom.broadcast(PlayerMessage::Result { winners, prizes, player_hands }).await;
             gameroom.state.bet_base = 0;
         },
         Err(err) => {
@@ -440,8 +480,8 @@ async fn handle_poker_step(
         PokerStep::Blind    => { handle_step_blind(&mut *gameroom_mutex.lock().await).await; },
         PokerStep::PreFlop  => { handle_step_preflop(&mut *gameroom_mutex.lock().await).await; },
         PokerStep::Flop     => { handle_step_flop(&mut *gameroom_mutex.lock().await).await; },
-        PokerStep::Turn     => { handle_step_deal_player_card(&mut *gameroom_mutex.lock().await).await; },
-        PokerStep::River    => { handle_step_deal_player_card(&mut *gameroom_mutex.lock().await).await; },
+        PokerStep::Turn     => { handle_step_deal_player_card(&mut *gameroom_mutex.lock().await, 1).await; },
+        PokerStep::River    => { handle_step_deal_player_card(&mut *gameroom_mutex.lock().await, 1).await; },
         PokerStep::Showdown => { handle_step_showdown(&mut *gameroom_mutex.lock().await).await; },
         PokerStep::BettingRound => {
             handle_step_betting_round(gameroom_mutex, notification_receiver).await;

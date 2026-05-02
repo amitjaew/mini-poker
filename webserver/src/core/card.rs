@@ -80,6 +80,18 @@ pub enum Suit {
     Hearts,
     Spades
 }
+
+impl From<Suit> for char {
+    fn from(value: Suit) -> Self {
+        match value {
+            Suit::Clubs => 'c',
+            Suit::Diamonds => 'd',
+            Suit::Hearts => 'h',
+            Suit::Spades => 's'
+        }
+    }
+}
+
 pub const CARD_SUITS: [Suit; 4] = [
     Suit::Clubs,
     Suit::Diamonds,

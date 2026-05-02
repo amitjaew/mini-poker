@@ -24,6 +24,40 @@ pub enum PlayerWarningType {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+pub struct GamePlayerStateDTO {
+    id: bool,
+    is_betting: bool,
+    bet_amount: u32,
+    funds: u32
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct CardDealDTO {
+    pub suit: char,
+    pub rank: u8
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct CardReveallDTO {
+    pub suit: char,
+    pub rank: u8,
+    pub owner: CardOwnerDTO
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum CardOwnerDTO {
+    Player,
+    Community
+}
+#[derive(Serialize, Deserialize, Clone)]
+pub struct HandRevealDTO {
+    pub player_id: Uuid,
+    pub cards: Vec<CardReveallDTO>,
+    // TODO: Hand Eval
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlayerMessage {
     Session { player_id: Uuid },
@@ -31,6 +65,20 @@ pub enum PlayerMessage {
     Step { step: PokerStep },
     ActivePlayers { players: Vec<Uuid> },
     Turn { player_id: Uuid, timeout: u64 },
+    GameState {
+        players: Vec<GamePlayerStateDTO>,
+        step: PokerStep
+    },
+    Blind {
+        small_blind_player: Uuid,
+        big_blind_player: Uuid,
+        small_blind_amount: u32,
+        big_blind_amount: u32
+    },
+    CardDeal {
+        cards: Vec<CardDealDTO>,
+        owner: CardOwnerDTO
+    },
     PlayerAction {
         player_id: Uuid,
         action: PlayerGameAction,
@@ -38,7 +86,8 @@ pub enum PlayerMessage {
     },
     Result {
         winners: Vec<Uuid>,
-        prizes: Vec<u32>
+        prizes: Vec<u32>,
+        player_hands: Vec<HandRevealDTO>
     },
     Warning {
         warning_type: PlayerWarningType,
