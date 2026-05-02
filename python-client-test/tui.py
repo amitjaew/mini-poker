@@ -1,9 +1,11 @@
 from __future__ import annotations
-import asyncio
+
 import argparse
+import asyncio
 import datetime
 from typing import Optional
 
+import agent as agent_module
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -19,8 +21,6 @@ from textual.widgets import (
     Rule,
     Select,
 )
-
-import agent as agent_module
 
 
 class CheckMark(Checkbox):
@@ -52,12 +52,17 @@ DEFAULT_N   = 2
 class PokerTUI(App):
     CSS = """
     #controls {
-        height: 6;
+        height: auto;
         background: $panel;
-        align: left middle;
         padding: 0 1;
     }
-    #controls > Label {
+    #inputs-row {
+        height: 3;
+        align: right middle;
+        margin-bottom: 1;
+        margin-top: 1;
+    }
+    #inputs-row Label {
         width: auto;
         height: 3;
         content-align: center middle;
@@ -70,23 +75,17 @@ class PokerTUI(App):
     #n-players {
         width: 16;
     }
-    #actions-col {
-        width: 26;
-        height: 6;
-        padding: 0 0 0 2;
-        border-left: solid $accent;
-    }
-    #session-buttons {
+    #actions-row {
         height: 3;
-        width: 100%;
-        align: left middle;
+        align: right middle;
+        margin-bottom: 1;
     }
-    #session-buttons Button {
+    #actions-row Button {
         min-width: 10;
         height: 3;
         margin-right: 1;
     }
-    #actions-col Checkbox {
+    #actions-row Checkbox {
         height: 3;
     }
     DataTable {
@@ -124,22 +123,22 @@ class PokerTUI(App):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Vertical():
-            with Horizontal(id="controls"):
-                yield Label("URL:")
-                yield Input(id="url-input", value=self._url,
-                            placeholder="ws://host:port/path")
-                yield Label("Players:")
-                yield Select(
-                    options=N_OPTIONS,
-                    id="n-players",
-                    value=self._n_players,
-                    allow_blank=False,
-                )
-                with Vertical(id="actions-col"):
-                    with Horizontal(id="session-buttons"):
-                        yield Button("▶ Start", id="btn-start", variant="success")
-                        yield Button("■ Stop",  id="btn-stop",  variant="error",
-                                     disabled=True)
+            with Vertical(id="controls"):
+                with Horizontal(id="inputs-row"):
+                    yield Label("URL:")
+                    yield Input(id="url-input", value=self._url,
+                                placeholder="ws://host:port/path")
+                    yield Label("Players:")
+                    yield Select(
+                        options=N_OPTIONS,
+                        id="n-players",
+                        value=self._n_players,
+                        allow_blank=False,
+                    )
+                with Horizontal(id="actions-row"):
+                    yield Button("▶ Start", id="btn-start", variant="success")
+                    yield Button("■ Stop",  id="btn-stop",  variant="error",
+                                 disabled=True)
                     yield CheckMark("No fold", id="no-fold")
             yield DataTable(id="player-table", show_cursor=False,
                             zebra_stripes=True)
