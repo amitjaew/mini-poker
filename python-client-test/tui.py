@@ -26,6 +26,7 @@ from textual.widgets import (
 class CheckMark(Checkbox):
     BUTTON_INNER = "✓"
 from messages import (
+    CommunityCardsUpdated,
     GameEvent,
     PlayerConnected,
     PlayerFundsChanged,
@@ -40,6 +41,7 @@ TABLE_COLUMNS = [
     ("Status",   "status"),
     ("Action",   "action"),
     ("Bet",      "bet"),
+    ("Cards",    "cards"),
     ("Latency",  "latency"),
 ]
 
@@ -92,6 +94,11 @@ class PokerTUI(App):
         height: auto;
         max-height: 20;
     }
+    #community-row {
+        height: 1;
+        background: $panel;
+        padding: 0 1;
+    }
     Rule {
         margin: 0;
         color: $accent;
@@ -142,6 +149,7 @@ class PokerTUI(App):
                     yield CheckMark("No fold", id="no-fold")
             yield DataTable(id="player-table", show_cursor=False,
                             zebra_stripes=True)
+            yield Label(" Community: —", id="community-row")
             yield Rule()
             yield Label(" Event Log", id="log-label")
             yield RichLog(id="event-log", markup=True, highlight=False,
@@ -171,31 +179,39 @@ class PokerTUI(App):
         if event.button.id == "btn-start":
             self._start_session()
         elif event.button.id == "btn-stop":
-            self._stop_session()
+            if self._running:
+                self._stop_session()
+            else:
+                self._start_session()
 
     # ── Session lifecycle ─────────────────────────────────────────────────────
 
     def _start_session(self) -> None:
         self._running = True
+        stop_btn = self.query_one("#btn-stop", Button)
+        stop_btn.disabled = False
+        stop_btn.label = "■ Stop"
         self.query_one("#btn-start", Button).disabled = True
-        self.query_one("#btn-stop",  Button).disabled = False
         self.query_one("#url-input", Input).disabled  = True
         self.query_one("#n-players", Select).disabled = True
 
         table = self.query_one(DataTable)
         table.clear()
+        self.query_one(RichLog).clear()
+        self.query_one("#community-row", Label).update(" Community: —")
 
         n = self._n_players
+        session_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         for i in range(n):
             table.add_row(
-                str(i + 1), "...", "~1000", "Waiting", "None", "0", "-",
+                str(i + 1), "...", "~1000", "Waiting", "None", "0", "", "-",
                 key=str(i),
             )
 
         self.query_one(RichLog).write(
             f"[bold green]Starting {n} agent(s) → {self._url}[/]"
         )
-        self._session_worker = self._run_all_agents(self._url, n, self._no_fold)
+        self._session_worker = self._run_all_agents(self._url, n, self._no_fold, session_id)
 
     def _stop_session(self) -> None:
         if self._session_worker is not None:
@@ -206,7 +222,9 @@ class PokerTUI(App):
     def _on_session_ended(self) -> None:
         self._running = False
         self.query_one("#btn-start", Button).disabled = False
-        self.query_one("#btn-stop",  Button).disabled = True
+        stop_btn = self.query_one("#btn-stop", Button)
+        stop_btn.disabled = False
+        stop_btn.label = "↺ Renew"
         self.query_one("#url-input", Input).disabled  = False
         self.query_one("#n-players", Select).disabled = False
         self.query_one(RichLog).write("[dim]--- session ended ---[/dim]")
@@ -214,10 +232,10 @@ class PokerTUI(App):
     # ── Background worker ─────────────────────────────────────────────────────
 
     @work(exclusive=True, exit_on_error=False)
-    async def _run_all_agents(self, url: str, n: int, no_fold: bool) -> None:
+    async def _run_all_agents(self, url: str, n: int, no_fold: bool, session_id: str) -> None:
         try:
             await asyncio.gather(
-                *[agent_module.run_agent(i, url, self, no_fold=no_fold) for i in range(n)],
+                *[agent_module.run_agent(i, url, self, no_fold=no_fold, session_id=session_id) for i in range(n)],
                 return_exceptions=True,
             )
             self.post_message(SessionStopped(-1, "all agents done"))
@@ -239,6 +257,7 @@ class PokerTUI(App):
             "status":  "status",
             "action":  "action",
             "bet":     "bet",
+            "cards":   "cards",
             "latency": "latency",
             "funds":   "funds",
         }
@@ -259,6 +278,10 @@ class PokerTUI(App):
             )
         except Exception:
             pass
+
+    def on_community_cards_updated(self, msg: CommunityCardsUpdated) -> None:
+        text = f" Community: {msg.text}" if msg.text else " Community: —"
+        self.query_one("#community-row", Label).update(text)
 
     def on_game_event(self, msg: GameEvent) -> None:
         ts = datetime.datetime.now().strftime("%H:%M:%S")

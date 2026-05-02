@@ -1,0 +1,171 @@
+2026-05-02T01:19:58.508 RX {"type": "session", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e"}
+2026-05-02T01:20:03.509 RX {"type": "ping", "server_ts": 1777699203508}
+2026-05-02T01:20:03.509 TX {"type": "pong", "client_ts": 1777699203509, "server_ts": 1777699203508}
+2026-05-02T01:20:03.509 RX {"type": "step", "step": "blind"}
+2026-05-02T01:20:03.509 RX {"type": "step", "step": "pre_flop"}
+2026-05-02T01:20:03.509 RX {"type": "card_deal", "cards": [{"suit": "c", "rank": 3}, {"suit": "h", "rank": 0}, {"suit": "h", "rank": 9}, {"suit": "c", "rank": 9}], "owner": "player"}
+2026-05-02T01:20:03.509 RX {"type": "step", "step": "betting_round"}
+2026-05-02T01:20:03.509 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699213509}
+2026-05-02T01:20:03.515 RX {"type": "pong_ack", "server_ts": 1777699203508, "client_ts": 1777699203509, "server_ack_ts": 1777699203509}
+2026-05-02T01:20:04.766 TX {"type": "check"}
+2026-05-02T01:20:04.767 RX {"type": "warning", "warning_type": {"type": "invalid_action"}, "message": "Cannot check"}
+2026-05-02T01:20:08.510 RX {"type": "ping", "server_ts": 1777699208510}
+2026-05-02T01:20:08.510 TX {"type": "pong", "client_ts": 1777699208510, "server_ts": 1777699208510}
+2026-05-02T01:20:08.511 RX {"type": "pong_ack", "server_ts": 1777699208510, "client_ts": 1777699208510, "server_ack_ts": 1777699208511}
+2026-05-02T01:20:13.510 RX {"type": "turn", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "timeout": 1777699223510}
+2026-05-02T01:20:13.511 RX {"type": "ping", "server_ts": 1777699213511}
+2026-05-02T01:20:13.511 TX {"type": "pong", "client_ts": 1777699213511, "server_ts": 1777699213511}
+2026-05-02T01:20:13.512 RX {"type": "pong_ack", "server_ts": 1777699213511, "client_ts": 1777699213511, "server_ack_ts": 1777699213512}
+2026-05-02T01:20:18.513 RX {"type": "ping", "server_ts": 1777699218513}
+2026-05-02T01:20:18.513 TX {"type": "pong", "client_ts": 1777699218513, "server_ts": 1777699218513}
+2026-05-02T01:20:18.513 RX {"type": "pong_ack", "server_ts": 1777699218513, "client_ts": 1777699218513, "server_ack_ts": 1777699218513}
+2026-05-02T01:20:23.512 RX {"type": "turn", "player_id": "c007cc6e-9265-4ff2-bee0-bc411739a169", "timeout": 1777699233511}
+2026-05-02T01:20:23.514 RX {"type": "ping", "server_ts": 1777699223514}
+2026-05-02T01:20:23.514 TX {"type": "pong", "client_ts": 1777699223514, "server_ts": 1777699223514}
+2026-05-02T01:20:23.514 RX {"type": "pong_ack", "server_ts": 1777699223514, "client_ts": 1777699223514, "server_ack_ts": 1777699223514}
+2026-05-02T01:20:24.113 RX {"type": "player_action", "player_id": "c007cc6e-9265-4ff2-bee0-bc411739a169", "action": "Check", "bet_base": 0}
+2026-05-02T01:20:24.113 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699234111}
+2026-05-02T01:20:25.153 TX {"type": "raise", "amount": 111}
+2026-05-02T01:20:25.154 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": {"Raise": 111}, "bet_base": 0}
+2026-05-02T01:20:25.154 RX {"type": "turn", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "timeout": 1777699235153}
+2026-05-02T01:20:26.611 RX {"type": "player_action", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "action": {"Raise": 20}, "bet_base": 111}
+2026-05-02T01:20:26.611 RX {"type": "turn", "player_id": "c007cc6e-9265-4ff2-bee0-bc411739a169", "timeout": 1777699236610}
+2026-05-02T01:20:27.598 RX {"type": "player_action", "player_id": "c007cc6e-9265-4ff2-bee0-bc411739a169", "action": {"Raise": 143}, "bet_base": 131}
+2026-05-02T01:20:27.598 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699237597}
+2026-05-02T01:20:28.515 RX {"type": "ping", "server_ts": 1777699228514}
+2026-05-02T01:20:28.515 TX {"type": "pong", "client_ts": 1777699228515, "server_ts": 1777699228514}
+2026-05-02T01:20:28.516 RX {"type": "pong_ack", "server_ts": 1777699228514, "client_ts": 1777699228515, "server_ack_ts": 1777699228515}
+2026-05-02T01:20:28.555 TX {"type": "call"}
+2026-05-02T01:20:28.556 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": "Call", "bet_base": 274}
+2026-05-02T01:20:28.596 RX {"type": "turn", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "timeout": 1777699238555}
+2026-05-02T01:20:29.084 RX {"type": "player_action", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "action": "Call", "bet_base": 274}
+2026-05-02T01:20:29.084 RX {"type": "turn", "player_id": "c007cc6e-9265-4ff2-bee0-bc411739a169", "timeout": 1777699239083}
+2026-05-02T01:20:29.540 RX {"type": "player_action", "player_id": "c007cc6e-9265-4ff2-bee0-bc411739a169", "action": "Fold", "bet_base": 274}
+2026-05-02T01:20:29.540 RX {"type": "step", "step": "flop"}
+2026-05-02T01:20:29.540 RX {"type": "card_deal", "cards": [{"suit": "h", "rank": 12}, {"suit": "s", "rank": 11}, {"suit": "d", "rank": 2}], "owner": "community"}
+2026-05-02T01:20:29.540 RX {"type": "step", "step": "betting_round"}
+2026-05-02T01:20:29.540 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699239538}
+2026-05-02T01:20:29.999 TX {"type": "raise", "amount": 128}
+2026-05-02T01:20:30.001 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": {"Raise": 128}, "bet_base": 274}
+2026-05-02T01:20:30.001 RX {"type": "turn", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "timeout": 1777699240000}
+2026-05-02T01:20:30.413 RX {"type": "player_action", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "action": "Call", "bet_base": 402}
+2026-05-02T01:20:30.413 RX {"type": "step", "step": "turn"}
+2026-05-02T01:20:30.413 RX {"type": "card_deal", "cards": [{"suit": "h", "rank": 11}], "owner": "community"}
+2026-05-02T01:20:30.413 RX {"type": "step", "step": "betting_round"}
+2026-05-02T01:20:30.413 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699240412}
+2026-05-02T01:20:30.982 TX {"type": "raise", "amount": 166}
+2026-05-02T01:20:30.984 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": {"Raise": 166}, "bet_base": 402}
+2026-05-02T01:20:30.984 RX {"type": "turn", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "timeout": 1777699240983}
+2026-05-02T01:20:31.875 RX {"type": "player_action", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "action": "Call", "bet_base": 568}
+2026-05-02T01:20:31.875 RX {"type": "step", "step": "river"}
+2026-05-02T01:20:31.875 RX {"type": "card_deal", "cards": [{"suit": "h", "rank": 7}], "owner": "community"}
+2026-05-02T01:20:31.875 RX {"type": "step", "step": "betting_round"}
+2026-05-02T01:20:31.875 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699241874}
+2026-05-02T01:20:33.027 TX {"type": "raise", "amount": 161}
+2026-05-02T01:20:33.029 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": {"Raise": 161}, "bet_base": 568}
+2026-05-02T01:20:33.029 RX {"type": "turn", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "timeout": 1777699243027}
+2026-05-02T01:20:33.516 RX {"type": "ping", "server_ts": 1777699233516}
+2026-05-02T01:20:33.516 TX {"type": "pong", "client_ts": 1777699233516, "server_ts": 1777699233516}
+2026-05-02T01:20:33.517 RX {"type": "pong_ack", "server_ts": 1777699233516, "client_ts": 1777699233516, "server_ack_ts": 1777699233517}
+2026-05-02T01:20:34.247 RX {"type": "player_action", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "action": {"Raise": 196}, "bet_base": 729}
+2026-05-02T01:20:34.247 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699244245}
+2026-05-02T01:20:35.738 TX {"type": "fold"}
+2026-05-02T01:20:35.739 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": "Fold", "bet_base": 925}
+2026-05-02T01:20:35.739 RX {"type": "turn", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "timeout": 1777699245738}
+2026-05-02T01:20:36.118 RX {"type": "player_action", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "action": "Call", "bet_base": 925}
+2026-05-02T01:20:36.118 RX {"type": "step", "step": "showdown"}
+2026-05-02T01:20:36.119 RX {"type": "result", "winners": ["2c1e29eb-c160-40e4-ae35-3fa4fef5f879"], "prizes": [1928], "player_hands": [{"player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "cards": [{"suit": "c", "rank": 3, "owner": "player"}, {"suit": "h", "rank": 0, "owner": "player"}, {"suit": "h", "rank": 9, "owner": "player"}, {"suit": "c", "rank": 9, "owner": "player"}]}, {"player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "cards": [{"suit": "d", "rank": 0, "owner": "player"}, {"suit": "s", "rank": 0, "owner": "player"}, {"suit": "c", "rank": 12, "owner": "player"}, {"suit": "d", "rank": 9, "owner": "player"}]}, {"player_id": "c007cc6e-9265-4ff2-bee0-bc411739a169", "cards": [{"suit": "d", "rank": 12, "owner": "player"}, {"suit": "c", "rank": 5, "owner": "player"}, {"suit": "d", "rank": 7, "owner": "player"}, {"suit": "c", "rank": 4, "owner": "player"}]}]}
+2026-05-02T01:20:38.518 RX {"type": "ping", "server_ts": 1777699238517}
+2026-05-02T01:20:38.518 TX {"type": "pong", "client_ts": 1777699238518, "server_ts": 1777699238517}
+2026-05-02T01:20:38.518 RX {"type": "pong_ack", "server_ts": 1777699238517, "client_ts": 1777699238518, "server_ack_ts": 1777699238518}
+2026-05-02T01:20:41.119 RX {"type": "step", "step": "blind"}
+2026-05-02T01:20:41.119 RX {"type": "step", "step": "pre_flop"}
+2026-05-02T01:20:41.119 RX {"type": "card_deal", "cards": [{"suit": "c", "rank": 11}, {"suit": "d", "rank": 11}, {"suit": "d", "rank": 6}, {"suit": "c", "rank": 3}], "owner": "player"}
+2026-05-02T01:20:41.121 RX {"type": "step", "step": "betting_round"}
+2026-05-02T01:20:41.121 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699251119}
+2026-05-02T01:20:42.611 TX {"type": "check"}
+2026-05-02T01:20:42.613 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": "Check", "bet_base": 0}
+2026-05-02T01:20:42.613 RX {"type": "turn", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "timeout": 1777699252612}
+2026-05-02T01:20:43.519 RX {"type": "ping", "server_ts": 1777699243519}
+2026-05-02T01:20:43.519 TX {"type": "pong", "client_ts": 1777699243519, "server_ts": 1777699243519}
+2026-05-02T01:20:43.520 RX {"type": "pong_ack", "server_ts": 1777699243519, "client_ts": 1777699243519, "server_ack_ts": 1777699243519}
+2026-05-02T01:20:48.520 RX {"type": "ping", "server_ts": 1777699248520}
+2026-05-02T01:20:48.520 TX {"type": "pong", "client_ts": 1777699248520, "server_ts": 1777699248520}
+2026-05-02T01:20:48.521 RX {"type": "pong_ack", "server_ts": 1777699248520, "client_ts": 1777699248520, "server_ack_ts": 1777699248521}
+2026-05-02T01:20:52.613 RX {"type": "turn", "player_id": "c007cc6e-9265-4ff2-bee0-bc411739a169", "timeout": 1777699262612}
+2026-05-02T01:20:53.522 RX {"type": "ping", "server_ts": 1777699253521}
+2026-05-02T01:20:53.522 TX {"type": "pong", "client_ts": 1777699253522, "server_ts": 1777699253521}
+2026-05-02T01:20:53.522 RX {"type": "pong_ack", "server_ts": 1777699253521, "client_ts": 1777699253522, "server_ack_ts": 1777699253522}
+2026-05-02T01:20:58.523 RX {"type": "ping", "server_ts": 1777699258522}
+2026-05-02T01:20:58.523 TX {"type": "pong", "client_ts": 1777699258523, "server_ts": 1777699258522}
+2026-05-02T01:20:58.524 RX {"type": "pong_ack", "server_ts": 1777699258522, "client_ts": 1777699258523, "server_ack_ts": 1777699258523}
+2026-05-02T01:21:02.614 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699272614}
+2026-05-02T01:21:03.272 TX {"type": "check"}
+2026-05-02T01:21:03.274 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": "Check", "bet_base": 0}
+2026-05-02T01:21:03.274 RX {"type": "turn", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "timeout": 1777699273273}
+2026-05-02T01:21:03.525 RX {"type": "ping", "server_ts": 1777699263524}
+2026-05-02T01:21:03.525 TX {"type": "pong", "client_ts": 1777699263525, "server_ts": 1777699263524}
+2026-05-02T01:21:03.525 RX {"type": "pong_ack", "server_ts": 1777699263524, "client_ts": 1777699263525, "server_ack_ts": 1777699263525}
+2026-05-02T01:21:04.347 RX {"type": "player_action", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "action": {"Raise": 154}, "bet_base": 0}
+2026-05-02T01:21:04.347 RX {"type": "turn", "player_id": "c007cc6e-9265-4ff2-bee0-bc411739a169", "timeout": 1777699274345}
+2026-05-02T01:21:08.526 RX {"type": "ping", "server_ts": 1777699268526}
+2026-05-02T01:21:08.526 TX {"type": "pong", "client_ts": 1777699268526, "server_ts": 1777699268526}
+2026-05-02T01:21:08.526 RX {"type": "pong_ack", "server_ts": 1777699268526, "client_ts": 1777699268526, "server_ack_ts": 1777699268526}
+2026-05-02T01:21:13.527 RX {"type": "ping", "server_ts": 1777699273526}
+2026-05-02T01:21:13.527 TX {"type": "pong", "client_ts": 1777699273527, "server_ts": 1777699273526}
+2026-05-02T01:21:13.527 RX {"type": "pong_ack", "server_ts": 1777699273526, "client_ts": 1777699273527, "server_ack_ts": 1777699273527}
+2026-05-02T01:21:14.347 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699284347}
+2026-05-02T01:21:15.503 TX {"type": "raise", "amount": 49}
+2026-05-02T01:21:15.504 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": {"Raise": 49}, "bet_base": 154}
+2026-05-02T01:21:15.504 RX {"type": "turn", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "timeout": 1777699285503}
+2026-05-02T01:21:16.518 RX {"type": "player_action", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "action": {"Raise": 119}, "bet_base": 203}
+2026-05-02T01:21:16.518 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699286517}
+2026-05-02T01:21:17.273 TX {"type": "call"}
+2026-05-02T01:21:17.274 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": "Call", "bet_base": 322}
+2026-05-02T01:21:17.274 RX {"type": "turn", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "timeout": 1777699287273}
+2026-05-02T01:21:18.256 RX {"type": "player_action", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "action": {"Raise": 85}, "bet_base": 322}
+2026-05-02T01:21:18.256 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699288255}
+2026-05-02T01:21:18.528 RX {"type": "ping", "server_ts": 1777699278527}
+2026-05-02T01:21:18.528 TX {"type": "pong", "client_ts": 1777699278528, "server_ts": 1777699278527}
+2026-05-02T01:21:18.528 RX {"type": "pong_ack", "server_ts": 1777699278527, "client_ts": 1777699278528, "server_ack_ts": 1777699278528}
+2026-05-02T01:21:19.757 TX {"type": "raise", "amount": 68}
+2026-05-02T01:21:19.758 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": {"Raise": 68}, "bet_base": 407}
+2026-05-02T01:21:19.758 RX {"type": "turn", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "timeout": 1777699289757}
+2026-05-02T01:21:20.214 RX {"type": "player_action", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "action": "Fold", "bet_base": 475}
+2026-05-02T01:21:20.214 RX {"type": "step", "step": "flop"}
+2026-05-02T01:21:20.214 RX {"type": "card_deal", "cards": [{"suit": "h", "rank": 12}, {"suit": "s", "rank": 2}, {"suit": "d", "rank": 2}], "owner": "community"}
+2026-05-02T01:21:20.214 RX {"type": "step", "step": "betting_round"}
+2026-05-02T01:21:20.214 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699290212}
+2026-05-02T01:21:20.877 TX {"type": "check"}
+2026-05-02T01:21:20.879 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": "Check", "bet_base": 475}
+2026-05-02T01:21:20.879 RX {"type": "step", "step": "turn"}
+2026-05-02T01:21:20.879 RX {"type": "card_deal", "cards": [{"suit": "c", "rank": 10}], "owner": "community"}
+2026-05-02T01:21:20.879 RX {"type": "step", "step": "betting_round"}
+2026-05-02T01:21:20.879 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699290877}
+2026-05-02T01:21:21.592 TX {"type": "check"}
+2026-05-02T01:21:21.593 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": "Check", "bet_base": 475}
+2026-05-02T01:21:21.593 RX {"type": "step", "step": "river"}
+2026-05-02T01:21:21.593 RX {"type": "card_deal", "cards": [{"suit": "d", "rank": 12}], "owner": "community"}
+2026-05-02T01:21:21.593 RX {"type": "step", "step": "betting_round"}
+2026-05-02T01:21:21.594 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699291592}
+2026-05-02T01:21:22.706 TX {"type": "check"}
+2026-05-02T01:21:22.707 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": "Check", "bet_base": 475}
+2026-05-02T01:21:22.707 RX {"type": "step", "step": "showdown"}
+2026-05-02T01:21:22.707 RX {"type": "result", "winners": ["e5a3321b-7cbe-47b3-b110-33459742162e"], "prizes": [884], "player_hands": [{"player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "cards": [{"suit": "c", "rank": 11, "owner": "player"}, {"suit": "d", "rank": 11, "owner": "player"}, {"suit": "d", "rank": 6, "owner": "player"}, {"suit": "c", "rank": 3, "owner": "player"}]}, {"player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "cards": [{"suit": "d", "rank": 7, "owner": "player"}, {"suit": "d", "rank": 10, "owner": "player"}, {"suit": "c", "rank": 7, "owner": "player"}, {"suit": "s", "rank": 9, "owner": "player"}]}, {"player_id": "c007cc6e-9265-4ff2-bee0-bc411739a169", "cards": [{"suit": "c", "rank": 4, "owner": "player"}, {"suit": "c", "rank": 6, "owner": "player"}, {"suit": "h", "rank": 4, "owner": "player"}, {"suit": "c", "rank": 8, "owner": "player"}]}]}
+2026-05-02T01:21:23.528 RX {"type": "ping", "server_ts": 1777699283528}
+2026-05-02T01:21:23.528 TX {"type": "pong", "client_ts": 1777699283528, "server_ts": 1777699283528}
+2026-05-02T01:21:23.529 RX {"type": "pong_ack", "server_ts": 1777699283528, "client_ts": 1777699283528, "server_ack_ts": 1777699283529}
+2026-05-02T01:21:27.708 RX {"type": "step", "step": "blind"}
+2026-05-02T01:21:27.708 RX {"type": "step", "step": "pre_flop"}
+2026-05-02T01:21:27.708 RX {"type": "card_deal", "cards": [{"suit": "c", "rank": 3}, {"suit": "d", "rank": 12}, {"suit": "s", "rank": 4}, {"suit": "d", "rank": 5}], "owner": "player"}
+2026-05-02T01:21:27.708 RX {"type": "step", "step": "betting_round"}
+2026-05-02T01:21:27.708 RX {"type": "turn", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "timeout": 1777699297707}
+2026-05-02T01:21:28.112 TX {"type": "raise", "amount": 157}
+2026-05-02T01:21:28.114 RX {"type": "player_action", "player_id": "e5a3321b-7cbe-47b3-b110-33459742162e", "action": {"Raise": 157}, "bet_base": 0}
+2026-05-02T01:21:28.114 RX {"type": "turn", "player_id": "2c1e29eb-c160-40e4-ae35-3fa4fef5f879", "timeout": 1777699298113}
+2026-05-02T01:21:28.530 RX {"type": "ping", "server_ts": 1777699288529}
+2026-05-02T01:21:28.530 TX {"type": "pong", "client_ts": 1777699288530, "server_ts": 1777699288529}
+2026-05-02T01:21:28.530 RX {"type": "pong_ack", "server_ts": 1777699288529, "client_ts": 1777699288530, "server_ack_ts": 1777699288530}
+2026-05-02T01:21:33.531 RX {"type": "ping", "server_ts": 1777699293531}
+2026-05-02T01:21:33.531 TX {"type": "pong", "client_ts": 1777699293531, "server_ts": 1777699293531}
+2026-05-02T01:21:33.532 RX {"type": "pong_ack", "server_ts": 1777699293531, "client_ts": 1777699293531, "server_ack_ts": 1777699293532}

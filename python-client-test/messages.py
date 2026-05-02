@@ -35,3 +35,9 @@ class SessionStopped(Message):
         super().__init__()
         self.player_index = player_index
         self.reason = reason
+
+
+class CommunityCardsUpdated(Message):
+    def __init__(self, text: str) -> None:
+        super().__init__()
+        self.text = text
