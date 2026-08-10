@@ -1,6 +1,6 @@
 use crate::core::card::{Card, Owner, DECK};
 use crate::core::game::GameType;
-use crate::core::hand::{compare_hands, HandCompare};
+use crate::core::hand::compare_hands;
 use crate::server::game::player::{
     CardDealDTO, CardOwnerDTO, CardReveallDTO, HandRevealDTO, PlayerMessage, PlayerSession,
     PlayerWarningType,
@@ -493,76 +493,92 @@ async fn handle_step_showdown(gameroom: &mut GameRoom) {
         })
         .collect();
 
-    let bet_sum: u32 = gameroom
+    let result = compare_hands(hands, gameroom.game_type);
+    if !result.is_ok() {
+        return;
+    }
+
+    let winners: Vec<(usize, Uuid, u32)> = result
+        .unwrap_or(Vec::new())
+        .iter()
+        .map(|&idx| {
+            (
+                idx,
+                gameroom.players[end_players[idx]].id,
+                gameroom.players[end_players[idx]].state.bet,
+            )
+        })
+        .collect();
+
+    let bet_cap: u32 = winners
+        .iter()
+        .max_by_key(|(_, _, bet)| bet)
+        .map_or(0, |(_, _, bet)| *bet);
+
+    let bet_pool: u32 = gameroom
         .players
         .iter_mut()
-        .map(|player| player.state.bet)
-        .sum();
-    let winners: Vec<Uuid>;
-    let prizes: Vec<u32>;
-
-    match compare_hands(hands, gameroom.game_type) {
-        Ok(result) => {
-            match result {
-                HandCompare::Tie(tied_indexes) => {
-                    winners = tied_indexes
-                        .iter()
-                        .map(|&idx| gameroom.players[end_players[idx]].id)
-                        .collect();
-
-                    let divided_amount;
-                    if tied_indexes.len() == 0 {
-                        divided_amount = 0;
-                    } else {
-                        divided_amount = bet_sum / tied_indexes.len() as u32;
-                    }
-                    prizes = winners.iter().map(|_| divided_amount).collect(); // PENDING FIX: prizes proportional to bet
-
-                    for end_player_idx in tied_indexes {
-                        let player_idx = end_players[end_player_idx];
-                        gameroom.players[player_idx].state.funds += divided_amount;
-                    }
-                }
-                HandCompare::Winner(winner_index) => {
-                    gameroom.players[end_players[winner_index]].state.funds += bet_sum;
-                    winners = vec![gameroom.players[end_players[winner_index]].id.clone()];
-                    prizes = vec![bet_sum];
-                }
+        .map(|player| {
+            if player.state.bet > bet_cap {
+                player.state.funds += player.state.bet - bet_cap;
+                return bet_cap;
             }
+            player.state.bet
+        })
+        .sum();
 
-            let player_hands: Vec<HandRevealDTO> = gameroom
-                .players
-                .iter()
-                .map(|player| HandRevealDTO {
-                    player_id: player.id.clone(),
-                    cards: player
-                        .state
-                        .dealt_cards
-                        .iter()
-                        .map(|card| CardReveallDTO {
-                            suit: card.suit.into(),
-                            rank: card.rank as u8,
-                            owner: match card.owner {
-                                Owner::Player => CardOwnerDTO::Player,
-                                Owner::Community => CardOwnerDTO::Community,
-                            },
-                        })
-                        .collect(),
-                })
-                .collect();
-            gameroom
-                .broadcast(PlayerMessage::Result {
-                    winners,
-                    prizes,
-                    player_hands,
-                })
-                .await;
-            gameroom.state.bet_base = 0;
-        }
-        Err(err) => {
-            println!("Error comparing hands: {:?}", err);
+    let winner_bet_sum: u32 = winners.iter().map(|(_, _, bet)| bet).sum();
+    let mut prizes: Vec<u32> = winners
+        .iter()
+        .map(|(_, _, bet)| *bet * bet_pool / winner_bet_sum)
+        .collect();
+
+    let rounding_error: u32 = bet_pool.saturating_sub(prizes.iter().sum());
+
+    if rounding_error > 0 {
+        let mut shuffled_prizes_indexes: Vec<usize> = (0..prizes.len()).collect();
+        shuffled_prizes_indexes.shuffle(&mut rand::rng());
+
+        for i in 0..rounding_error as usize {
+            let price_idx = shuffled_prizes_indexes[i % shuffled_prizes_indexes.len()];
+            prizes[price_idx] += 1;
         }
     }
+
+    for (idx, _, _) in winners.iter() {
+        let player_idx = end_players[*idx];
+        gameroom.players[player_idx].state.funds += prizes[*idx];
+    }
+
+    let player_hands: Vec<HandRevealDTO> = gameroom
+        .players
+        .iter()
+        .map(|player| HandRevealDTO {
+            player_id: player.id.clone(),
+            cards: player
+                .state
+                .dealt_cards
+                .iter()
+                .map(|card| CardReveallDTO {
+                    suit: card.suit.into(),
+                    rank: card.rank as u8,
+                    owner: match card.owner {
+                        Owner::Player => CardOwnerDTO::Player,
+                        Owner::Community => CardOwnerDTO::Community,
+                    },
+                })
+                .collect(),
+        })
+        .collect();
+
+    gameroom
+        .broadcast(PlayerMessage::Result {
+            winners: winners.iter().map(|(_, id, _)| id.to_owned()).collect(),
+            prizes,
+            player_hands,
+        })
+        .await;
+    gameroom.state.bet_base = 0;
 }
 
 async fn handle_poker_step(

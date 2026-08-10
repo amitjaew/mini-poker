@@ -1,8 +1,8 @@
-use crate::core::card::{ Card, Owner, Rank };
+use crate::core::card::{Card, Owner, Rank};
 use crate::core::combinations::{combinations, omaha_hands};
 use crate::core::game::GameType;
-use std::cmp::{min, max};
-use std::fmt::{ Display, Formatter };
+use std::cmp::{max, min};
+use std::fmt::{Display, Formatter};
 use std::result::Result;
 
 #[derive(Clone, Copy)]
@@ -16,7 +16,7 @@ pub enum HandType {
     FullHouse,
     FourOfAKind,
     StraightFlush,
-    RoyalFlush
+    RoyalFlush,
 }
 
 impl Display for HandType {
@@ -31,7 +31,7 @@ impl Display for HandType {
             Self::FullHouse => write!(f, "Full House"),
             Self::FourOfAKind => write!(f, "Four of a Kind"),
             Self::StraightFlush => write!(f, "Straight Flush"),
-            Self::RoyalFlush => write!(f, "Royal Flush")
+            Self::RoyalFlush => write!(f, "Royal Flush"),
         }
     }
 }
@@ -40,26 +40,31 @@ fn get_straight(ranks: &Vec<u8>) -> Option<Vec<u8>> {
     let n: usize = ranks.len();
     let mut continuity_count = 0;
 
-    for i in 0..n-1 {
-        let delta = ranks[i] - ranks[i+1];
-        if delta == 0 { continue; }
-        else if delta == 1 { continuity_count += 1; }
-        else { continuity_count = 0; }
+    for i in 0..n - 1 {
+        let delta = ranks[i] - ranks[i + 1];
+        if delta == 0 {
+            continue;
+        } else if delta == 1 {
+            continuity_count += 1;
+        } else {
+            continuity_count = 0;
+        }
 
         if continuity_count == 4 {
             let mut scale = Vec::with_capacity(5);
-            let base = ranks[i+1] + 4;
-            for j in 0..5 { scale.push(base - j); }
+            let base = ranks[i + 1] + 4;
+            for j in 0..5 {
+                scale.push(base - j);
+            }
             return Some(scale);
         }
     }
-    if  ranks[0] == 12 &&
-        ranks[n-1] == 0 &&
-        continuity_count == 3
-    {
+    if ranks[0] == 12 && ranks[n - 1] == 0 && continuity_count == 3 {
         let mut scale = Vec::with_capacity(5);
         scale.push(12);
-        for j in 0..4 { scale.push(3 - j); }
+        for j in 0..4 {
+            scale.push(3 - j);
+        }
         return Some(scale);
     }
 
@@ -92,18 +97,23 @@ pub fn evaluate_hand(hand: &mut Vec<Card>) -> Result<(HandType, [u8; 5]), &'stat
         if suit_count[card.suit as usize] == 5 {
             is_flush = true;
 
-            let mut filtered_hand: Vec<u8>  = hand.iter()
-                                    .filter( |_card| _card.suit == card.suit )
-                                    .map( |_card| _card.rank as u8 )
-                                    .collect();
+            let mut filtered_hand: Vec<u8> = hand
+                .iter()
+                .filter(|_card| _card.suit == card.suit)
+                .map(|_card| _card.rank as u8)
+                .collect();
             // Flush + scale check (royal/straight)
             match get_straight(&mut filtered_hand) {
                 Some(straight) => {
-                    for i in 0..5 { sorted_card_rank[i] = straight[i]; }
+                    for i in 0..5 {
+                        sorted_card_rank[i] = straight[i];
+                    }
                     is_straight = true;
-                },
+                }
                 None => {
-                    for i in 0..5 { sorted_card_rank[i] =  filtered_hand[i]; }
+                    for i in 0..5 {
+                        sorted_card_rank[i] = filtered_hand[i];
+                    }
                 }
             }
             break;
@@ -112,131 +122,162 @@ pub fn evaluate_hand(hand: &mut Vec<Card>) -> Result<(HandType, [u8; 5]), &'stat
 
     if is_flush && is_straight && sorted_card_rank[0] == Rank::Ace as u8 {
         return Ok((HandType::RoyalFlush, sorted_card_rank));
-    }
-    else if is_flush && is_straight {
+    } else if is_flush && is_straight {
         return Ok((HandType::StraightFlush, sorted_card_rank));
     }
 
     let mut card_count = [0u8; 13];
-    for i in 0..hand.len() { card_count[hand[i].rank as usize] += 1; }
+    for i in 0..hand.len() {
+        card_count[hand[i].rank as usize] += 1;
+    }
 
     for i in (0..card_count.len()).rev() {
         let count: u8 = card_count[i];
 
-        if count == 0 { continue; }
-        else if count == 4 {
+        if count == 0 {
+            continue;
+        } else if count == 4 {
             is_four_of_kind = true;
-            let filtered_hand = hand.iter()
-                                    .filter(|card| card.rank as usize != i)
-                                    .map(|card| card.rank as u8);
-            for j in 0..4 { sorted_card_rank[j] = i as u8; }
+            let filtered_hand = hand
+                .iter()
+                .filter(|card| card.rank as usize != i)
+                .map(|card| card.rank as u8);
+            for j in 0..4 {
+                sorted_card_rank[j] = i as u8;
+            }
 
             match filtered_hand.max() {
                 Some(val) => sorted_card_rank[4] = val,
-                None => sorted_card_rank[4] = 0
+                None => sorted_card_rank[4] = 0,
             }
             break; // Best case on remaining scenarios, doesnt require greedy search
-        }
-        else if (count == 3 && is_pair) || (count == 2 && is_three_of_kind) || (count == 3 && is_three_of_kind){
+        } else if (count == 3 && is_pair)
+            || (count == 2 && is_three_of_kind)
+            || (count == 3 && is_three_of_kind)
+        {
             is_full_house = true;
-            if count == 2 /* && is_three_of_kind */ { pair_rank = i as u8; }
-            else if count == 3 && is_pair { three_rank = i as u8; }
-            else {
+            if count == 2
+            /* && is_three_of_kind */
+            {
+                pair_rank = i as u8;
+            } else if count == 3 && is_pair {
+                three_rank = i as u8;
+            } else {
                 pair_rank = min(three_rank, i as u8);
                 three_rank = max(three_rank, i as u8);
             }
 
-            for j in 0..3 { sorted_card_rank[j] = three_rank; }
-            for j in 3..5 { sorted_card_rank[j] = pair_rank; }
-        }
-        else if count == 2 && is_pair && !is_flush {
+            for j in 0..3 {
+                sorted_card_rank[j] = three_rank;
+            }
+            for j in 3..5 {
+                sorted_card_rank[j] = pair_rank;
+            }
+        } else if count == 2 && is_pair && !is_flush {
             is_two_pair = true;
             if i > pair_rank.into() {
-                for j in 0..2 { sorted_card_rank[j] = i as u8; }
-                for j in 2..4 { sorted_card_rank[j] = pair_rank; }
-            }
-            else {
-                for j in 0..2 { sorted_card_rank[j] = pair_rank; }
-                for j in 2..4 { sorted_card_rank[j] = i as u8; }
+                for j in 0..2 {
+                    sorted_card_rank[j] = i as u8;
+                }
+                for j in 2..4 {
+                    sorted_card_rank[j] = pair_rank;
+                }
+            } else {
+                for j in 0..2 {
+                    sorted_card_rank[j] = pair_rank;
+                }
+                for j in 2..4 {
+                    sorted_card_rank[j] = i as u8;
+                }
             }
 
-            let filtered_hand = hand.iter()
-                                    .filter(|card| card.rank as usize != i && card.rank as u8 != pair_rank)
-                                    .map(|card| card.rank as u8);
+            let filtered_hand = hand
+                .iter()
+                .filter(|card| card.rank as usize != i && card.rank as u8 != pair_rank)
+                .map(|card| card.rank as u8);
             match filtered_hand.max() {
                 Some(val) => sorted_card_rank[4] = val,
-                None => sorted_card_rank[4] = 0
+                None => sorted_card_rank[4] = 0,
             }
-        }
-        else if count == 3 {
+        } else if count == 3 {
             is_three_of_kind = true;
             three_rank = i as u8;
-        }
-        else if count == 2 {
+        } else if count == 2 {
             is_pair = true;
             pair_rank = i as u8;
         }
-
     }
 
     if is_four_of_kind {
         return Ok((HandType::FourOfAKind, sorted_card_rank));
-    }
-    else if is_full_house {
+    } else if is_full_house {
         return Ok((HandType::FullHouse, sorted_card_rank));
-    }
-    else if is_flush {
+    } else if is_flush {
         return Ok((HandType::Flush, sorted_card_rank));
     }
 
     // Straight check
-    let ranks = hand.iter()
-                    .map(|card| card.rank as u8)
-                    .collect();
+    let ranks = hand.iter().map(|card| card.rank as u8).collect();
     match get_straight(&ranks) {
         Some(straight) => {
-           for i in 0..5 { sorted_card_rank[i] = straight[i]; }
-           is_straight = true;
-        },
+            for i in 0..5 {
+                sorted_card_rank[i] = straight[i];
+            }
+            is_straight = true;
+        }
         None => {}
     }
     if is_straight {
         return Ok((HandType::Straight, sorted_card_rank));
-    }
-    else if is_three_of_kind {
-        let temp : Vec<u8> = hand.iter()
-                                    .filter(|card| card.rank as u8 != three_rank)
-                                    .map(|card| card.rank as u8)
-                                    .collect();
-        for i in 0..3 { sorted_card_rank[i] = three_rank as u8; }
-        for i in 0..2 { sorted_card_rank[3+i] = temp[i] }
+    } else if is_three_of_kind {
+        let temp: Vec<u8> = hand
+            .iter()
+            .filter(|card| card.rank as u8 != three_rank)
+            .map(|card| card.rank as u8)
+            .collect();
+        for i in 0..3 {
+            sorted_card_rank[i] = three_rank as u8;
+        }
+        for i in 0..2 {
+            sorted_card_rank[3 + i] = temp[i]
+        }
         return Ok((HandType::ThreeOfAKind, sorted_card_rank));
-    }
-    else if is_two_pair {
+    } else if is_two_pair {
         return Ok((HandType::TwoPair, sorted_card_rank));
-    }
-    else if is_pair {
-        let temp : Vec<u8> = hand.iter()
-                                    .filter(|card| card.rank as u8 != pair_rank)
-                                    .map(|card| card.rank as u8)
-                                    .collect();
-        for i in 0..2 { sorted_card_rank[i] = pair_rank; }
-        for i in 0..3 { sorted_card_rank[2+i] = temp[temp.len()-i-1] }
+    } else if is_pair {
+        let temp: Vec<u8> = hand
+            .iter()
+            .filter(|card| card.rank as u8 != pair_rank)
+            .map(|card| card.rank as u8)
+            .collect();
+        for i in 0..2 {
+            sorted_card_rank[i] = pair_rank;
+        }
+        for i in 0..3 {
+            sorted_card_rank[2 + i] = temp[temp.len() - i - 1]
+        }
         return Ok((HandType::Pair, sorted_card_rank));
-    }
-    else {
-        let mut temp : Vec<u8> = hand.iter()
-                                    .map(|card| card.rank as u8)
-                                    .collect();
+    } else {
+        let mut temp: Vec<u8> = hand.iter().map(|card| card.rank as u8).collect();
         temp.sort();
-        for i in 0..5 { sorted_card_rank[i] = temp[temp.len()-i-1]; }
+        for i in 0..5 {
+            sorted_card_rank[i] = temp[temp.len() - i - 1];
+        }
         return Ok((HandType::HighCard, sorted_card_rank));
     }
 }
 
 pub fn evaluate_hand_omaha(hand: &[Card]) -> Result<(HandType, [u8; 5]), &'static str> {
-    let player_cards: Vec<Card> = hand.iter().filter(|c| c.owner == Owner::Player).cloned().collect();
-    let community_cards: Vec<Card> = hand.iter().filter(|c| c.owner == Owner::Community).cloned().collect();
+    let player_cards: Vec<Card> = hand
+        .iter()
+        .filter(|c| c.owner == Owner::Player)
+        .cloned()
+        .collect();
+    let community_cards: Vec<Card> = hand
+        .iter()
+        .filter(|c| c.owner == Owner::Community)
+        .cloned()
+        .collect();
 
     omaha_hands(&player_cards, &community_cards)
         .into_iter()
@@ -253,46 +294,47 @@ pub fn evaluate_hand_texas_holdem(hand: &[Card]) -> Result<(HandType, [u8; 5]), 
         .ok_or("no valid hand found")
 }
 
-pub enum HandCompare {
-    Tie(Vec<usize>),
-    Winner(usize)
-}
-
-pub fn compare_hands(hands: Vec<Vec<Card>>, game_type: GameType) -> Result<HandCompare, &'static str> {
+pub fn compare_hands(
+    hands: Vec<Vec<Card>>,
+    game_type: GameType,
+) -> Result<Vec<usize>, &'static str> {
     let mut hand_results: Vec<(HandType, [u8; 5])> = Vec::with_capacity(hands.len());
 
     for mut hand in hands.into_iter() {
         match game_type {
-            GameType::TexasHoldemPoker => {
-                match evaluate_hand_texas_holdem(&mut hand) {
-                    Ok(res) => { hand_results.push(res); },
-                    Err(err) => {
-                        return Err(err);
-                    }
+            GameType::TexasHoldemPoker => match evaluate_hand_texas_holdem(&mut hand) {
+                Ok(res) => {
+                    hand_results.push(res);
+                }
+                Err(err) => {
+                    return Err(err);
                 }
             },
-            GameType::OmahaPoker => {
-                match evaluate_hand_omaha(&mut hand) {
-                    Ok(res) => { hand_results.push(res); },
-                    Err(err) => {
-                        return Err(err);
-                    }
+            GameType::OmahaPoker => match evaluate_hand_omaha(&mut hand) {
+                Ok(res) => {
+                    hand_results.push(res);
                 }
-            }
+                Err(err) => {
+                    return Err(err);
+                }
+            },
         }
     }
 
-    let hand_scores: Vec<u32> = hand_results.into_iter().map(|(hand_type, sorted_ranks)| {
-        let mut sum: u32 = 0;
-        const POW_BASE: u32 = 12;
+    let hand_scores: Vec<u32> = hand_results
+        .into_iter()
+        .map(|(hand_type, sorted_ranks)| {
+            let mut sum: u32 = 0;
+            const POW_BASE: u32 = 12;
 
-        for j in 0..sorted_ranks.len() {
-            sum += POW_BASE.pow(j as u32) * sorted_ranks[j] as u32;
-        }
-        sum += POW_BASE.pow(sorted_ranks.len() as u32) * (hand_type as u32);
+            for j in 0..sorted_ranks.len() {
+                sum += POW_BASE.pow(j as u32) * sorted_ranks[j] as u32;
+            }
+            sum += POW_BASE.pow(sorted_ranks.len() as u32) * (hand_type as u32);
 
-        sum
-    }).collect();
+            sum
+        })
+        .collect();
 
     let mut max_score = 0;
     let mut max_score_count = 0;
@@ -300,9 +342,12 @@ pub fn compare_hands(hands: Vec<Vec<Card>>, game_type: GameType) -> Result<HandC
 
     for index in 0..hand_scores.len() {
         let score = hand_scores[index];
-        if score < max_score { continue; }
-        if score == max_score { max_score_count += 1; }
-        else {
+        if score < max_score {
+            continue;
+        }
+        if score == max_score {
+            max_score_count += 1;
+        } else {
             max_score_count = 1;
             max_score = score;
             last_winner_index = index;
@@ -310,14 +355,16 @@ pub fn compare_hands(hands: Vec<Vec<Card>>, game_type: GameType) -> Result<HandC
     }
 
     if max_score_count == 1 {
-        return Ok(HandCompare::Winner(last_winner_index));
+        return Ok(vec![last_winner_index]);
     }
 
     let mut tied_indexes: Vec<usize> = Vec::with_capacity(max_score_count);
     for index in 0..hand_scores.len() {
-        if hand_scores[index] != max_score { continue; }
+        if hand_scores[index] != max_score {
+            continue;
+        }
         tied_indexes.push(index);
     }
 
-    Ok(HandCompare::Tie(tied_indexes))
+    Ok(tied_indexes)
 }
