@@ -132,7 +132,7 @@ impl GameRoom {
                             id,
                             sender,
                             state: GameRoomPlayerState {
-                                is_playing: true, // Placeholder
+                                is_playing: false,
                                 is_betting: false,
                                 dealt_cards: Vec::new(),
                                 bet: 0,
