@@ -70,17 +70,18 @@ pub enum PlayerGameAction {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum PlayerPayload {
+pub enum PlayerAction {
     Fold,
     Check,
     Call,
     Raise { amount: u32 },
     Pong { client_ts: u64, server_ts: u64 },
+    Update { is_playing: bool },
 }
 
 pub enum GameRoomMessage {
-    PlayerPayload {
-        payload: PlayerPayload,
+    PlayerAction {
+        payload: PlayerAction,
         from: uuid::Uuid,
     },
     PlayerJoin {
@@ -142,7 +143,7 @@ impl GameRoom {
                     }
                 }
             }
-            GameRoomMessage::PlayerPayload { from, payload } => {
+            GameRoomMessage::PlayerAction { from, payload } => {
                 println!("Gameroom received {:?} from Player {}", payload, from);
 
                 let mut _player = self.players.iter_mut().find(|player| player.id == from);
@@ -152,7 +153,10 @@ impl GameRoom {
                 let player = _player.unwrap();
 
                 match payload {
-                    PlayerPayload::Fold => {
+                    PlayerAction::Update { is_playing } => {
+                        player.state.is_playing = is_playing;
+                    }
+                    PlayerAction::Fold => {
                         player.state.action = PlayerGameAction::Fold;
                         _ = notification_sender
                             .send(GameRoomStateNotification {
@@ -160,7 +164,7 @@ impl GameRoom {
                             })
                             .await;
                     }
-                    PlayerPayload::Call => {
+                    PlayerAction::Call => {
                         player.state.action = PlayerGameAction::Call;
                         _ = notification_sender
                             .send(GameRoomStateNotification {
@@ -168,7 +172,7 @@ impl GameRoom {
                             })
                             .await;
                     }
-                    PlayerPayload::Check => {
+                    PlayerAction::Check => {
                         player.state.action = PlayerGameAction::Check;
                         _ = notification_sender
                             .send(GameRoomStateNotification {
@@ -176,7 +180,7 @@ impl GameRoom {
                             })
                             .await;
                     }
-                    PlayerPayload::Raise { amount } => {
+                    PlayerAction::Raise { amount } => {
                         player.state.action = PlayerGameAction::Raise(amount);
                         _ = notification_sender
                             .send(GameRoomStateNotification {
@@ -184,7 +188,7 @@ impl GameRoom {
                             })
                             .await;
                     }
-                    PlayerPayload::Pong {
+                    PlayerAction::Pong {
                         client_ts,
                         server_ts,
                     } => {

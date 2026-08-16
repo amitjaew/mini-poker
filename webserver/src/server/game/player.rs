@@ -10,7 +10,7 @@ use tokio;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::server::game::gameroom::{GameRoomMessage, PlayerGameAction, PlayerPayload, PokerStep};
+use crate::server::game::gameroom::{GameRoomMessage, PlayerAction, PlayerGameAction, PokerStep};
 
 pub struct PlayerSession {
     pub id: uuid::Uuid,
@@ -188,10 +188,10 @@ async fn handle_player_inbound_message(
     player_id: Uuid,
 ) {
     match unparsed_message.to_text() {
-        Ok(message) => match serde_json::from_str::<PlayerPayload>(message) {
+        Ok(message) => match serde_json::from_str::<PlayerAction>(message) {
             Ok(payload) => {
                 let _ = sender
-                    .send(GameRoomMessage::PlayerPayload {
+                    .send(GameRoomMessage::PlayerAction {
                         payload,
                         from: player_id,
                     })

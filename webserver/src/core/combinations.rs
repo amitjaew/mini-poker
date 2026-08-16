@@ -28,7 +28,9 @@ pub fn combinations(cards: &[Card], k: usize) -> Vec<Vec<Card>> {
         if i == 0 {
             break;
         }
+        // Increment rightmost incrementable index
         indices[i - 1] += 1;
+        // Reset inbetweeen upper indexes
         for j in i..k {
             indices[j] = indices[j - 1] + 1;
         }

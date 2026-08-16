@@ -12,11 +12,11 @@ For a poker room (2–6 players) there's no need for proximity audio, server-sid
 
 ## Server Changes
 
-Extend the existing message enums to carry signaling through the `PlayerPayload → GameRoomMessage → PlayerMessage` pipeline:
+Extend the existing message enums to carry signaling through the `PlayerAction → GameRoomMessage → PlayerMessage` pipeline:
 
 ```rust
 // player.rs — incoming from client
-pub enum PlayerPayload {
+pub enum PlayerAction {
     Fold, Check, Call, Raise { amount: u32 },
     RtcOffer  { to: Uuid, sdp: String },
     RtcAnswer { to: Uuid, sdp: String },
@@ -25,7 +25,7 @@ pub enum PlayerPayload {
 
 // gameroom.rs — route to target player by Uuid
 pub enum GameRoomMessage {
-    PlayerPayload { payload: PlayerPayload, from: Uuid },
+    PlayerAction { payload: PlayerAction, from: Uuid },
     PlayerJoin    { id: Uuid, sender: mpsc::Sender<PlayerMessage> },
     RtcSignal     { from: Uuid, to: Uuid, signal: RtcSignalKind },
 }

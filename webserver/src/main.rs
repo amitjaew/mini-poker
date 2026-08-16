@@ -13,11 +13,12 @@ Required params:
 \t\ttexas-holdem
 \t\tomaha
 
-\tdemo <mode>
-\t\thand_eval
-\t\thand_eval_omaha
-\t\tcompare_holdem
-\t\tcompare_omaha
+ \tdemo <mode>
+ \t\thand_eval
+ \t\thand_eval_omaha
+ \t\tcompare_holdem
+ \t\tcompare_omaha
+ \t\tcombinations
 ";
 
 #[tokio::main]
@@ -54,10 +55,12 @@ fn handle_demo(mode: String) {
         demo::hand_evaluation::compare_hands_holdem_demo();
     } else if mode == "compare_omaha" {
         demo::hand_evaluation::compare_hands_omaha_demo();
+    } else if mode == "combinations" {
+        demo::combinations::combinations_demo();
     } else {
         eprintln!("Invalid mode: {mode}");
         eprintln!(
-            "Valid modes:\n\thand_eval\n\thand_eval_omaha\n\tcompare_holdem\n\tcompare_omaha"
+            "Valid modes:\n\thand_eval\n\thand_eval_omaha\n\tcompare_holdem\n\tcompare_omaha\n\tcombinations"
         );
     }
 }
