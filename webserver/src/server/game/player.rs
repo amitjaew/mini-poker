@@ -1,14 +1,14 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use tokio::sync::{ mpsc };
-use tokio;
-use axum::extract::ws::{ CloseFrame, Message, Utf8Bytes, WebSocket };
+use axum::extract::ws::{CloseFrame, Message, Utf8Bytes, WebSocket};
 use futures_util::{
-   sink::SinkExt,
-   stream::{ StreamExt, SplitSink, SplitStream }
+    sink::SinkExt,
+    stream::{SplitSink, SplitStream, StreamExt},
 };
+use serde::{Deserialize, Serialize};
+use tokio;
+use tokio::sync::mpsc;
 use uuid::Uuid;
-use serde::{Serialize, Deserialize};
 
 use crate::server::game::gameroom::{GameRoomMessage, PlayerGameAction, PlayerPayload, PokerStep};
 
@@ -20,7 +20,7 @@ pub struct PlayerSession {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlayerWarningType {
     Debug,
-    InvalidAction
+    InvalidAction,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -28,27 +28,27 @@ pub struct GamePlayerStateDTO {
     id: bool,
     is_betting: bool,
     bet_amount: u32,
-    funds: u32
+    funds: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct CardDealDTO {
     pub suit: char,
-    pub rank: u8
+    pub rank: u8,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct CardReveallDTO {
     pub suit: char,
     pub rank: u8,
-    pub owner: CardOwnerDTO
+    pub owner: CardOwnerDTO,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum CardOwnerDTO {
     Player,
-    Community
+    Community,
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub struct HandRevealDTO {
@@ -60,38 +60,49 @@ pub struct HandRevealDTO {
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlayerMessage {
-    Session { player_id: Uuid },
-    BetBase { bet_base: u32 },
-    Step { step: PokerStep },
-    ActivePlayers { players: Vec<Uuid> },
-    Turn { player_id: Uuid, timeout: u64 },
+    Session {
+        player_id: Uuid,
+    },
+    BetBase {
+        bet_base: u32,
+    },
+    Step {
+        step: PokerStep,
+    },
+    ActivePlayers {
+        players: Vec<Uuid>,
+    },
+    Turn {
+        player_id: Uuid,
+        timeout: u64,
+    },
     GameState {
         players: Vec<GamePlayerStateDTO>,
-        step: PokerStep
+        step: PokerStep,
     },
     Blind {
         small_blind_player: Uuid,
         big_blind_player: Uuid,
         small_blind_amount: u32,
-        big_blind_amount: u32
+        big_blind_amount: u32,
     },
     CardDeal {
         cards: Vec<CardDealDTO>,
-        owner: CardOwnerDTO
+        owner: CardOwnerDTO,
     },
     PlayerAction {
         player_id: Uuid,
         action: PlayerGameAction,
-        bet_base: u32
+        bet_base: u32,
     },
     Result {
         winners: Vec<Uuid>,
         prizes: Vec<u32>,
-        player_hands: Vec<HandRevealDTO>
+        player_hands: Vec<HandRevealDTO>,
     },
     Warning {
         warning_type: PlayerWarningType,
-        message: String
+        message: String,
     },
     Ping {
         server_ts: u64,
@@ -99,9 +110,9 @@ pub enum PlayerMessage {
     PongAck {
         server_ts: u64,
         client_ts: u64,
-        server_ack_ts: u64
+        server_ack_ts: u64,
     },
-    TerminateSession
+    TerminateSession,
 }
 
 impl PlayerSession {
@@ -116,29 +127,20 @@ impl PlayerSession {
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
         // let active = Arc::new(Mutex::new(true));
 
-        tokio::spawn(
-            player_message_recv_loop(
-                id.clone(),
-                player_receiver,
-                socket_sender,
-                shutdown_tx,
-                shutdown_rx.clone()
-            )
-        );
-        tokio::spawn(
-            player_socket_recv_loop(
-                id.clone(),
-                socket_receiver,
-                gameroom_sender,
-                shutdown_rx.clone()
-            )
-        );
-        tokio::spawn(
-            player_ping_loop(
-                player_sender,
-                shutdown_rx
-            )
-        );
+        tokio::spawn(player_message_recv_loop(
+            id.clone(),
+            player_receiver,
+            socket_sender,
+            shutdown_tx,
+            shutdown_rx.clone(),
+        ));
+        tokio::spawn(player_socket_recv_loop(
+            id.clone(),
+            socket_receiver,
+            gameroom_sender,
+            shutdown_rx.clone(),
+        ));
+        tokio::spawn(player_ping_loop(player_sender, shutdown_rx));
 
         Self { id: id.clone() }
     }
@@ -149,7 +151,7 @@ async fn player_message_recv_loop(
     mut receiver: mpsc::Receiver<PlayerMessage>,
     mut socket_sender: SplitSink<WebSocket, Message>,
     shutdown_tx: tokio::sync::watch::Sender<bool>,
-    mut shutdown_rx: tokio::sync::watch::Receiver<bool>
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
 ) {
     loop {
         tokio::select! {
@@ -183,25 +185,28 @@ async fn player_message_recv_loop(
 async fn handle_player_inbound_message(
     unparsed_message: Message,
     sender: &mpsc::Sender<GameRoomMessage>,
-    player_id: Uuid
-){
+    player_id: Uuid,
+) {
     match unparsed_message.to_text() {
         Ok(message) => {
             println!("Player {} sent message: {}", player_id, message);
             match serde_json::from_str::<PlayerPayload>(message) {
                 Ok(payload) => {
-                    let _ = sender.send(
-                        GameRoomMessage::PlayerPayload {
+                    let _ = sender
+                        .send(GameRoomMessage::PlayerPayload {
                             payload,
-                            from: player_id
-                        }
-                    ).await;
-                },
+                            from: player_id,
+                        })
+                        .await;
+                }
                 Err(err) => {
-                    eprintln!("Player {} sent invalid action: {}, {}", player_id, message, err);
+                    eprintln!(
+                        "Player {} sent invalid action: {}, {}",
+                        player_id, message, err
+                    );
                 }
             }
-        },
+        }
         Err(err) => {
             eprintln!("Invalid text message: {}", err);
         }
@@ -212,9 +217,8 @@ async fn player_socket_recv_loop(
     player_id: uuid::Uuid,
     mut socket_receiver: SplitStream<WebSocket>,
     sender: mpsc::Sender<GameRoomMessage>,
-    mut shutdown_rx: tokio::sync::watch::Receiver<bool>
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
 ) {
-
     loop {
         tokio::select! {
             received = socket_receiver.next() => {
@@ -239,7 +243,7 @@ async fn player_socket_recv_loop(
 
 async fn player_ping_loop(
     sender: mpsc::Sender<PlayerMessage>,
-    mut shutdown_rx: tokio::sync::watch::Receiver<bool>
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
 ) {
     loop {
         tokio::select! {
