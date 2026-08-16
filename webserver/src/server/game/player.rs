@@ -158,13 +158,13 @@ async fn player_message_recv_loop(
             received = receiver.recv() => {
                 match received {
                     Some(PlayerMessage::TerminateSession) => {
-                        println!("Player {}: Sending Terminate Session Message", player_id);
+                        println!("Sending to Player {}: Sending Terminate Session Message", player_id);
                         let close_payload: CloseFrame = CloseFrame { code: 1000, reason: Utf8Bytes::from("closing") };
                         let _ = socket_sender.send(Message::Close(Some(close_payload))).await;
                     },
                     Some(message) => {
                         let content = serde_json::to_string(&message).unwrap_or(String::new());
-                        println!("Player {}: Sending \n{}\n------------------------", player_id, content);
+                        println!("Sending to Player {} \n{}\n------------------------", player_id, content);
                         let _ = socket_sender.send(Message::text(content)).await;
                     },
                     None => {
@@ -188,25 +188,22 @@ async fn handle_player_inbound_message(
     player_id: Uuid,
 ) {
     match unparsed_message.to_text() {
-        Ok(message) => {
-            println!("Player {} sent message: {}", player_id, message);
-            match serde_json::from_str::<PlayerPayload>(message) {
-                Ok(payload) => {
-                    let _ = sender
-                        .send(GameRoomMessage::PlayerPayload {
-                            payload,
-                            from: player_id,
-                        })
-                        .await;
-                }
-                Err(err) => {
-                    eprintln!(
-                        "Player {} sent invalid action: {}, {}",
-                        player_id, message, err
-                    );
-                }
+        Ok(message) => match serde_json::from_str::<PlayerPayload>(message) {
+            Ok(payload) => {
+                let _ = sender
+                    .send(GameRoomMessage::PlayerPayload {
+                        payload,
+                        from: player_id,
+                    })
+                    .await;
             }
-        }
+            Err(err) => {
+                eprintln!(
+                    "Player {} sent invalid action: {}, {}",
+                    player_id, message, err
+                );
+            }
+        },
         Err(err) => {
             eprintln!("Invalid text message: {}", err);
         }

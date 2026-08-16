@@ -36,15 +36,3 @@ pub fn combinations(cards: &[Card], k: usize) -> Vec<Vec<Card>> {
 
     result
 }
-
-pub fn omaha_hands(hand: &[Card], community: &[Card]) -> Vec<Vec<Card>> {
-    let hole_combos = combinations(hand, 2);
-    let community_combos = combinations(community, 3);
-    let mut result = Vec::with_capacity(hole_combos.len() * community_combos.len());
-    for hole in &hole_combos {
-        for comm in &community_combos {
-            result.push(hole.iter().chain(comm.iter()).cloned().collect());
-        }
-    }
-    result
-}

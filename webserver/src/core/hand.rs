@@ -1,5 +1,5 @@
-use crate::core::card::{Card, Owner, Rank};
-use crate::core::combinations::{combinations, omaha_hands};
+use crate::core::card::{Card, Rank};
+use crate::core::combinations::combinations;
 use crate::core::game::GameType;
 use std::cmp::{max, min};
 use std::fmt::{Display, Formatter};
@@ -267,27 +267,11 @@ pub fn evaluate_hand(hand: &mut Vec<Card>) -> Result<(HandType, [u8; 5]), &'stat
     }
 }
 
-pub fn evaluate_hand_omaha(hand: &[Card]) -> Result<(HandType, [u8; 5]), &'static str> {
-    let player_cards: Vec<Card> = hand
-        .iter()
-        .filter(|c| c.owner == Owner::Player)
-        .cloned()
-        .collect();
-    let community_cards: Vec<Card> = hand
-        .iter()
-        .filter(|c| c.owner == Owner::Community)
-        .cloned()
-        .collect();
-
-    omaha_hands(&player_cards, &community_cards)
-        .into_iter()
-        .filter_map(|mut five_card_hand| evaluate_hand(&mut five_card_hand).ok())
-        .max_by_key(|(hand_type, ranks)| (*hand_type as u8, ranks.clone()))
-        .ok_or("no valid hand found")
-}
-
-pub fn evaluate_hand_texas_holdem(hand: &[Card]) -> Result<(HandType, [u8; 5]), &'static str> {
-    combinations(hand, 5)
+pub fn evaluate_hand_comb(
+    hand: &[Card],
+    n_cards: usize,
+) -> Result<(HandType, [u8; 5]), &'static str> {
+    combinations(hand, n_cards)
         .into_iter()
         .filter_map(|mut five_card_hand| evaluate_hand(&mut five_card_hand).ok())
         .max_by_key(|(hand_type, ranks)| (*hand_type as u8, ranks.clone()))
@@ -302,7 +286,7 @@ pub fn compare_hands(
 
     for mut hand in hands.into_iter() {
         match game_type {
-            GameType::TexasHoldemPoker => match evaluate_hand_texas_holdem(&mut hand) {
+            GameType::TexasHoldemPoker => match evaluate_hand_comb(&mut hand, 7) {
                 Ok(res) => {
                     hand_results.push(res);
                 }
@@ -310,7 +294,7 @@ pub fn compare_hands(
                     return Err(err);
                 }
             },
-            GameType::OmahaPoker => match evaluate_hand_omaha(&mut hand) {
+            GameType::OmahaPoker => match evaluate_hand_comb(&mut hand, 10) {
                 Ok(res) => {
                     hand_results.push(res);
                 }

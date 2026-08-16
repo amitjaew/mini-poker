@@ -237,6 +237,7 @@ async fn handle_step_blind(gameroom: &mut GameRoom) {
     match gameroom.players.get_mut(small_blind_idx as usize) {
         Some(player) => {
             player.state.bet = gameroom.min_bet;
+            player.state.funds -= gameroom.min_bet;
         }
         None => {}
     }
@@ -246,6 +247,7 @@ async fn handle_step_blind(gameroom: &mut GameRoom) {
     {
         Some(player) => {
             player.state.bet = 2 * gameroom.min_bet;
+            player.state.funds -= 2 * gameroom.min_bet;
         }
         None => {}
     }
@@ -410,6 +412,7 @@ async fn handle_step_betting_round(
                                 player.state.is_betting = false;
                             }
                             PlayerGameAction::Call => {
+                                player.state.funds -= bet_base - player.state.bet;
                                 player.state.bet = bet_base;
                             }
                             PlayerGameAction::Check => {
@@ -425,6 +428,7 @@ async fn handle_step_betting_round(
                             }
                             PlayerGameAction::Raise(raise) => {
                                 bet_base_update += raise;
+                                player.state.funds -= bet_base_update - player.state.bet;
                                 player.state.bet = bet_base_update;
                             }
                         }
@@ -545,9 +549,9 @@ async fn handle_step_showdown(gameroom: &mut GameRoom) {
         }
     }
 
-    for (idx, _, _) in winners.iter() {
+    for (i, (idx, _, _)) in winners.iter().enumerate() {
         let player_idx = end_players[*idx];
-        gameroom.players[player_idx].state.funds += prizes[*idx];
+        gameroom.players[player_idx].state.funds += prizes[i];
     }
 
     let player_hands: Vec<HandRevealDTO> = gameroom

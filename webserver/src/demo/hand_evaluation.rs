@@ -1,6 +1,6 @@
 use crate::core::card::{Card, Owner, Rank, Suit};
 use crate::core::game::GameType;
-use crate::core::hand::{compare_hands, evaluate_hand, evaluate_hand_omaha};
+use crate::core::hand::{compare_hands, evaluate_hand, evaluate_hand_comb};
 
 fn show_hand(hand: &[Card]) {
     for card in hand {
@@ -122,7 +122,7 @@ pub fn omaha_evaluation_demo() {
     show_hand(&hand);
     println!("-------------------------------------");
 
-    match evaluate_hand_omaha(&mut hand) {
+    match evaluate_hand_comb(&mut hand, 10) {
         Ok((hand_type, sorted_ranks)) => {
             println!("Best Hand Type: {}", hand_type);
             print!("Sorted rank values: ");
