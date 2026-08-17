@@ -11,10 +11,10 @@ ACTION_UPDATE = "update"
 # ── Server → Client message types
 MSG_SESSION = "session"
 MSG_STEP = "step"
-MSG_BET_BASE = "bet_base"
-MSG_ACTIVE_PLAYERS = "active_players"
+MSG_BETTING_PLAYERS = "betting_players"
+MSG_PLAYER_TURN_TIMEOUT = "player_turn_timeout"
 MSG_TURN = "turn"
-MSG_GAME_STATE = "game_state"
+MSG_GAME_STATE = "game_state"  # defined by server but never broadcast
 MSG_BLIND = "blind"
 MSG_CARD_DEAL = "card_deal"
 MSG_PLAYER_ACTION = "player_action"
@@ -25,7 +25,9 @@ MSG_PONG_ACK = "pong_ack"
 MSG_TERMINATE_SESSION = "terminate_session"
 
 # Steps that reset the per-hand bet state (serde rename_all = "snake_case").
-STEPS_RESET_BET = ("blind", "betting_round")
+# bet_base / player bet are cumulative across streets, so only a new hand
+# (blind) resets them.
+STEPS_RESET_BET = ("blind",)
 
 
 def encode_action(action_type: str, amount: int | None = None) -> dict:

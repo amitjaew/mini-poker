@@ -9,10 +9,11 @@ from websockets.exceptions import ConnectionClosedOK
 
 from poker_client.actions import choose_smart_action, random_action
 from poker_client.protocol import (
-    MSG_ACTIVE_PLAYERS,
-    MSG_BET_BASE,
+    MSG_BETTING_PLAYERS,
+    MSG_BLIND,
     MSG_PING,
     MSG_PLAYER_ACTION,
+    MSG_PLAYER_TURN_TIMEOUT,
     MSG_PONG_ACK,
     MSG_RESULT,
     MSG_SESSION,
@@ -60,13 +61,17 @@ def log_step(step: str):
     print(f"\n{B}{CY}STEP{R}  {B}{step.upper()}{R}")
 
 
-def log_bet_base(bet_base: int):
-    print(f"  {DIM}bet_base={B}{bet_base}{R}")
+def log_blind(sb_pid: str, bb_pid: str, sa: int, ba: int):
+    print(f"  {CY}BLIND{R}  SB {short(sb_pid)}({sa})  BB {short(bb_pid)}({ba})")
 
 
-def log_active_players(players: list):
+def log_betting_players(players: list):
     ids = "  ".join(short(p) for p in players)
-    print(f"  {DIM}active ({len(players)}): {ids}{R}")
+    print(f"  {DIM}betting ({len(players)}): {ids}{R}")
+
+
+def log_turn_timeout(pid: str):
+    print(f"  {RD}TIMEOUT{R} {short(pid)} folded")
 
 
 def log_action_sent(action: str):
@@ -167,17 +172,34 @@ async def handle_message(
         if not verbose:
             log_step(new_step)
 
-    elif msg_type == MSG_BET_BASE:
-        new_bet_base = data.get("bet_base", 0)
-        if state is not None:
-            state.bet_base = new_bet_base
-        if not verbose:
-            log_bet_base(new_bet_base)
-
-    elif msg_type == MSG_ACTIVE_PLAYERS:
+    elif msg_type == MSG_BETTING_PLAYERS:
         players = data.get("players", [])
+        if state is not None:
+            is_active = bool(state.my_id) and state.my_id in players
+            state.status = "Active" if is_active else "Folded"
         if not verbose:
-            log_active_players(players)
+            log_betting_players(players)
+
+    elif msg_type == MSG_BLIND:
+        sb_pid = data.get("small_blind_player", "")
+        bb_pid = data.get("big_blind_player", "")
+        sa = data.get("small_blind_amount", 0)
+        ba = data.get("big_blind_amount", 0)
+        if state is not None:
+            state.bet_base = ba
+            if state.my_id == sb_pid:
+                state.apply_blind(sa)
+            elif state.my_id == bb_pid:
+                state.apply_blind(ba)
+        if not verbose:
+            log_blind(sb_pid, bb_pid, sa, ba)
+
+    elif msg_type == MSG_PLAYER_TURN_TIMEOUT:
+        pid = data.get("player", "")
+        if state is not None and pid == state.my_id:
+            state.status = "Folded"
+        if not verbose:
+            log_turn_timeout(pid)
 
     elif msg_type == MSG_TURN:
         player_id = data.get("player_id", "")
@@ -208,10 +230,13 @@ async def handle_message(
         action_name, new_bet_base = parse_player_action(
             data.get("action"), data.get("bet_base", 0)
         )
+        acted_pid = data.get("player_id", "")
         if state is not None:
             state.bet_base = new_bet_base
+            if acted_pid == state.my_id and action_name == "FOLD":
+                state.status = "Folded"
         if not verbose:
-            log_player_action(data.get("player_id", ""), action_name, new_bet_base)
+            log_player_action(acted_pid, action_name, new_bet_base)
 
     elif msg_type == MSG_RESULT:
         if state is not None:

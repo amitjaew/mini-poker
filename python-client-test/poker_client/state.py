@@ -19,6 +19,11 @@ class PlayerState:
     community_cards: list = field(default_factory=list)
 
     # ── Fund bookkeeping ──────────────────────────────────────────────────────
+    def apply_blind(self, amount: int) -> None:
+        """Deduct a posted blind (small or big) from funds."""
+        self.current_bet = amount
+        self.funds -= amount
+
     def apply_action(self, action_type: str, amount: int = 0) -> None:
         """Update funds/current_bet/bet_base for an action this player takes."""
         self.last_action = action_type

@@ -22,12 +22,12 @@ from poker_client.messages import (
     SessionStopped,
 )
 from poker_client.protocol import (
-    MSG_ACTIVE_PLAYERS,
-    MSG_BET_BASE,
+    MSG_BETTING_PLAYERS,
     MSG_BLIND,
     MSG_CARD_DEAL,
     MSG_PING,
     MSG_PLAYER_ACTION,
+    MSG_PLAYER_TURN_TIMEOUT,
     MSG_PONG_ACK,
     MSG_RESULT,
     MSG_SESSION,
@@ -106,22 +106,39 @@ async def run_agent(
                     if step in STEPS_RESET_BET:
                         state.bet_base = 0
                         state.current_bet = 0
-                    state.last_action = "None"
-                    upd("action", "None")
-                    upd("bet", 0)
-                    upd("status", "Active")
+                        state.last_action = "None"
+                        upd("action", "None")
+                        upd("bet", 0)
                     log(f"[cyan]▸ {step.upper()}[/] [dim](P{player_index + 1})[/]")
 
-                elif msg_type == MSG_BET_BASE:
-                    state.bet_base = data.get("bet_base", 0)
+                elif msg_type == MSG_BETTING_PLAYERS:
+                    players = data.get("players", [])
+                    is_active = bool(state.my_id) and state.my_id in players
+                    status = "Active" if is_active else "Folded"
+                    state.status = status
+                    upd("status", status)
 
                 elif msg_type == MSG_BLIND:
                     sb_pid = data.get("small_blind_player", "")
                     bb_pid = data.get("big_blind_player", "")
                     sa = data.get("small_blind_amount", 0)
                     ba = data.get("big_blind_amount", 0)
+
                     state.community_cards = []
+                    state.hole_cards_text = ""
+                    upd("cards", "")
                     post(CommunityCardsUpdated(""))
+
+                    state.bet_base = ba
+                    if state.my_id == sb_pid:
+                        state.apply_blind(sa)
+                        upd("bet", state.current_bet)
+                        post(PlayerFundsChanged(player_index, state.funds))
+                    elif state.my_id == bb_pid:
+                        state.apply_blind(ba)
+                        upd("bet", state.current_bet)
+                        post(PlayerFundsChanged(player_index, state.funds))
+
                     log(
                         f"[cyan]Blinds:[/] SB [bold]{short(sb_pid)}[/]({sa}) "
                         f"BB [bold]{short(bb_pid)}[/]({ba})"
@@ -142,12 +159,14 @@ async def run_agent(
                             state.community_cards.extend(cards_text.split())
                         post(CommunityCardsUpdated(" ".join(state.community_cards)))
 
-                elif msg_type == MSG_ACTIVE_PLAYERS:
-                    players = data.get("players", [])
-                    is_active = bool(state.my_id) and state.my_id in players
-                    status = "Active" if is_active else "Folded"
-                    state.status = status
-                    upd("status", status)
+                elif msg_type == MSG_PLAYER_TURN_TIMEOUT:
+                    pid = data.get("player", "")
+                    if pid == state.my_id:
+                        state.status = "Folded"
+                        upd("status", "Folded")
+                        log(f"[red]P{player_index + 1} timed out → folded[/red]")
+                    else:
+                        log(f"[red]{short(pid)}[/red] timed out → folded")
 
                 elif msg_type == MSG_TURN:
                     turn_pid = data.get("player_id", "")
@@ -190,7 +209,11 @@ async def run_agent(
                         data.get("action"), data.get("bet_base", 0)
                     )
                     state.bet_base = new_bet_base
-                    if acted_pid != state.my_id:
+                    if acted_pid == state.my_id:
+                        if action_name == "FOLD":
+                            state.status = "Folded"
+                            upd("status", "Folded")
+                    else:
                         log(f"[magenta]{short(acted_pid)}[/] → [bold]{action_name}[/]")
 
                 elif msg_type == MSG_RESULT:
