@@ -5,7 +5,7 @@ import asyncio
 import datetime
 from typing import Optional
 
-import agent as agent_module
+from poker_client import agent as agent_module
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -25,7 +25,7 @@ from textual.widgets import (
 
 class CheckMark(Checkbox):
     BUTTON_INNER = "✓"
-from messages import (
+from poker_client.messages import (
     CommunityCardsUpdated,
     GameEvent,
     PlayerConnected,
