@@ -27,7 +27,9 @@ struct GameRoom {
     players: Vec<GameRoomPlayer>,
     state: GameRoomState,
     game_type: GameType,
+    turn_duration: u16,
     min_bet: u32,
+    min_funds: u32,
 }
 
 impl GameRoom {
@@ -40,7 +42,6 @@ impl GameRoom {
 
 struct GameRoomState {
     deck: [Card; 52],
-    turn_duration: u16,
     community_cards: Vec<Card>,
     big_blind_idx: u8,
     dealt_card_offset: usize,
@@ -94,25 +95,38 @@ struct GameRoomStateNotification {
     content: String,
 }
 
+struct GameRoomConfig {
+    min_bet: u32,
+    min_funds: u32,
+    turn_duration: u16,
+    game_type: GameType,
+}
+
 impl GameRoom {
-    fn new(game_type: GameType) -> Self {
+    fn new(config: GameRoomConfig) -> Self {
         let players = Vec::new();
         let state = GameRoomState {
             deck: DECK,
             community_cards: Vec::new(),
             big_blind_idx: 0,
-            turn_duration: 10,
             dealt_card_offset: 0,
             bet_base: 0,
             current_player_turn: None,
             current_player_timeout: None,
         };
 
+        assert!(
+            config.min_funds >= 2 * config.min_bet,
+            "Min funds should be more or equal than big blind"
+        );
+
         Self {
             players,
             state,
-            game_type,
-            min_bet: 1,
+            game_type: config.game_type,
+            min_bet: config.min_bet,
+            min_funds: config.min_funds,
+            turn_duration: config.turn_duration,
         }
     }
 
@@ -154,7 +168,9 @@ impl GameRoom {
 
                 match payload {
                     PlayerAction::Update { is_playing } => {
-                        player.state.is_playing = is_playing;
+                        if is_playing && player.state.funds >= self.min_funds {
+                            player.state.is_playing = is_playing;
+                        }
                     }
                     PlayerAction::Fold => {
                         player.state.action = PlayerGameAction::Fold;
@@ -229,6 +245,9 @@ async fn handle_step_blind(gameroom: &mut GameRoom) {
     gameroom.state.community_cards.clear();
 
     for player in gameroom.players.iter_mut() {
+        if player.state.is_playing && player.state.funds < gameroom.min_funds {
+            player.state.is_playing = false;
+        }
         player.state.is_betting = player.state.is_playing;
         player.state.dealt_cards.clear();
         player.state.bet = 0;
@@ -237,6 +256,8 @@ async fn handle_step_blind(gameroom: &mut GameRoom) {
     let n_players = gameroom.players.iter().len() as u8;
     let small_blind_idx = gameroom.state.big_blind_idx % n_players as u8;
     gameroom.state.big_blind_idx = (small_blind_idx + 1) % n_players as u8;
+
+    gameroom.state.bet_base = gameroom.min_bet * 2;
 
     match gameroom.players.get_mut(small_blind_idx as usize) {
         Some(player) => {
@@ -370,9 +391,9 @@ async fn handle_step_betting_round(
 
                 gameroom.state.current_player_turn = Some(gameroom.players[player_idx].id);
                 timeout_instant =
-                    Instant::now() + Duration::from_secs(gameroom.state.turn_duration as u64);
+                    Instant::now() + Duration::from_secs(gameroom.turn_duration as u64);
                 timeout_time =
-                    SystemTime::now() + Duration::from_secs(gameroom.state.turn_duration as u64);
+                    SystemTime::now() + Duration::from_secs(gameroom.turn_duration as u64);
                 gameroom.state.current_player_timeout = Some(timeout_time);
 
                 gameroom
@@ -403,12 +424,7 @@ async fn handle_step_betting_round(
 
                 match gameroom.players.get_mut(player_idx) {
                     Some(player) => {
-                        pending_broadcast = Some(PlayerMessage::PlayerAction {
-                            player_id: player.id.clone(),
-                            action: player.state.action.clone(),
-                            bet_base: bet_base_update,
-                        });
-                        match player.state.action {
+                        match player.state.action.clone() {
                             PlayerGameAction::None => {
                                 is_action = false;
                             }
@@ -416,8 +432,20 @@ async fn handle_step_betting_round(
                                 player.state.is_betting = false;
                             }
                             PlayerGameAction::Call => {
-                                player.state.funds -= bet_base - player.state.bet;
-                                player.state.bet = bet_base;
+                                let delta = bet_base - player.state.bet;
+                                if player.state.funds < delta {
+                                    is_action = false;
+                                    _ = player
+                                        .sender
+                                        .send(PlayerMessage::Warning {
+                                            warning_type: PlayerWarningType::InvalidAction,
+                                            message: "Not enough funds".to_string(),
+                                        })
+                                        .await;
+                                } else {
+                                    player.state.funds -= bet_base - player.state.bet;
+                                    player.state.bet = bet_base;
+                                }
                             }
                             PlayerGameAction::Check => {
                                 if player.state.bet != bet_base {
@@ -431,11 +459,28 @@ async fn handle_step_betting_round(
                                 }
                             }
                             PlayerGameAction::Raise(raise) => {
-                                bet_base_update += raise;
-                                player.state.funds -= bet_base_update - player.state.bet;
-                                player.state.bet = bet_base_update;
+                                let delta = bet_base_update + raise - player.state.bet;
+                                if delta > player.state.funds {
+                                    is_action = false;
+                                    _ = player
+                                        .sender
+                                        .send(PlayerMessage::Warning {
+                                            warning_type: PlayerWarningType::InvalidAction,
+                                            message: "Not enough funds".to_string(),
+                                        })
+                                        .await;
+                                } else {
+                                    bet_base_update += raise;
+                                    player.state.funds -= delta;
+                                    player.state.bet = bet_base_update;
+                                }
                             }
                         }
+                        pending_broadcast = Some(PlayerMessage::PlayerAction {
+                            player_id: player.id.clone(),
+                            action: player.state.action.clone(),
+                            bet_base: bet_base_update,
+                        });
                     }
                     None => {
                         is_action = false;
@@ -679,7 +724,12 @@ pub struct GameRoomHandle {
 impl GameRoomHandle {
     pub async fn new(game_type: GameType) -> Self {
         let (sender, receiver) = mpsc::channel(100);
-        let gameroom_mutex = Arc::new(Mutex::new(GameRoom::new(game_type)));
+        let gameroom_mutex = Arc::new(Mutex::new(GameRoom::new(GameRoomConfig {
+            min_bet: 10,
+            min_funds: 100,
+            turn_duration: 10,
+            game_type,
+        })));
 
         let (notif_sender, notif_receiver) = mpsc::channel(10);
         tokio::spawn(gameroom_message_loop(

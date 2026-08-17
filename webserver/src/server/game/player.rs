@@ -25,7 +25,7 @@ pub enum PlayerWarningType {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct GamePlayerStateDTO {
-    id: bool,
+    id: Uuid,
     is_betting: bool,
     bet_amount: u32,
     funds: u32,
