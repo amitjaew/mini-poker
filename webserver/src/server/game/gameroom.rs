@@ -530,13 +530,13 @@ async fn handle_step_betting_round(
 
                 match gameroom.players.get_mut(player_idx) {
                     Some(player) => {
-                        if player.state.bet < bet_base {
+                        if player.state.bet < bet_base && player.state.is_betting {
                             player.state.is_betting = false;
+                            let player_id = player.id;
+                            gameroom
+                                .broadcast(PlayerMessage::PlayerTurnTimeout { player: player_id })
+                                .await;
                         }
-                        let player_id = player.id;
-                        gameroom
-                            .broadcast(PlayerMessage::PlayerNotBetting { player: player_id })
-                            .await;
                     }
                     None => {}
                 }

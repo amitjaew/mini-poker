@@ -69,7 +69,7 @@ pub enum PlayerMessage {
     BettingPlayers {
         players: Vec<Uuid>,
     },
-    PlayerNotBetting {
+    PlayerTurnTimeout {
         player: Uuid,
     },
     Turn {
@@ -187,25 +187,25 @@ async fn handle_player_inbound_message(
     sender: &mpsc::Sender<GameRoomMessage>,
     player_id: Uuid,
 ) {
-    match unparsed_message.to_text() {
-        Ok(message) => match serde_json::from_str::<PlayerAction>(message) {
-            Ok(payload) => {
-                let _ = sender
-                    .send(GameRoomMessage::PlayerAction {
-                        payload,
-                        from: player_id,
-                    })
-                    .await;
-            }
-            Err(err) => {
-                eprintln!(
-                    "Player {} sent invalid action: {}, {}",
-                    player_id, message, err
-                );
-            }
-        },
+    // Only process text frames as game actions; ignore binary and control
+    // frames (Ping/Pong/Close) which the client may send as keepalives.
+    let Message::Text(message) = unparsed_message else {
+        return;
+    };
+    match serde_json::from_str::<PlayerAction>(message.as_str()) {
+        Ok(payload) => {
+            let _ = sender
+                .send(GameRoomMessage::PlayerAction {
+                    payload,
+                    from: player_id,
+                })
+                .await;
+        }
         Err(err) => {
-            eprintln!("Invalid text message: {}", err);
+            eprintln!(
+                "Player {} sent invalid action: {}, {}",
+                player_id, message.as_str(), err
+            );
         }
     }
 }
