@@ -63,14 +63,14 @@ pub enum PlayerMessage {
     Session {
         player_id: Uuid,
     },
-    BetBase {
-        bet_base: u32,
-    },
     Step {
         step: PokerStep,
     },
-    ActivePlayers {
+    BettingPlayers {
         players: Vec<Uuid>,
+    },
+    PlayerNotBetting {
+        player: Uuid,
     },
     Turn {
         player_id: Uuid,

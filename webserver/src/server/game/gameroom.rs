@@ -240,8 +240,10 @@ pub enum PokerStep {
 }
 
 async fn handle_step_blind(gameroom: &mut GameRoom) {
-    let mut rng = rand::rng();
-    gameroom.state.deck.shuffle(&mut rng);
+    {
+        let mut rng = rand::rng();
+        gameroom.state.deck.shuffle(&mut rng);
+    }
     gameroom.state.community_cards.clear();
 
     for player in gameroom.players.iter_mut() {
@@ -259,12 +261,17 @@ async fn handle_step_blind(gameroom: &mut GameRoom) {
 
     gameroom.state.bet_base = gameroom.min_bet * 2;
 
+    let small_blind_id;
+    let big_blind_id;
     match gameroom.players.get_mut(small_blind_idx as usize) {
         Some(player) => {
             player.state.bet = gameroom.min_bet;
             player.state.funds -= gameroom.min_bet;
+            small_blind_id = player.id;
         }
-        None => {}
+        None => {
+            panic!("Blind not found")
+        }
     }
     match gameroom
         .players
@@ -273,9 +280,31 @@ async fn handle_step_blind(gameroom: &mut GameRoom) {
         Some(player) => {
             player.state.bet = 2 * gameroom.min_bet;
             player.state.funds -= 2 * gameroom.min_bet;
+            big_blind_id = player.id;
         }
-        None => {}
+        None => {
+            panic!("Blind not found")
+        }
     }
+
+    gameroom
+        .broadcast(PlayerMessage::BettingPlayers {
+            players: gameroom
+                .players
+                .iter()
+                .filter_map(|player| player.state.is_betting.then_some(player.id))
+                .collect(),
+        })
+        .await;
+
+    gameroom
+        .broadcast(PlayerMessage::Blind {
+            small_blind_player: small_blind_id,
+            big_blind_player: big_blind_id,
+            small_blind_amount: gameroom.min_bet,
+            big_blind_amount: gameroom.min_bet * 2,
+        })
+        .await;
 }
 
 async fn handle_step_preflop(gameroom: &mut GameRoom) {
@@ -443,7 +472,7 @@ async fn handle_step_betting_round(
                                         })
                                         .await;
                                 } else {
-                                    player.state.funds -= bet_base - player.state.bet;
+                                    player.state.funds -= delta;
                                     player.state.bet = bet_base;
                                 }
                             }
@@ -504,6 +533,10 @@ async fn handle_step_betting_round(
                         if player.state.bet < bet_base {
                             player.state.is_betting = false;
                         }
+                        let player_id = player.id;
+                        gameroom
+                            .broadcast(PlayerMessage::PlayerNotBetting { player: player_id })
+                            .await;
                     }
                     None => {}
                 }
