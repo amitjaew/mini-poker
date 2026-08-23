@@ -24,11 +24,12 @@ pub enum PlayerWarningType {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct GamePlayerStateDTO {
-    id: Uuid,
-    is_betting: bool,
-    bet_amount: u32,
-    funds: u32,
+pub struct GameRoomPlayerStateDTO {
+    pub id: Uuid,
+    pub is_betting: bool,
+    pub is_playing: bool,
+    pub bet: u32,
+    pub funds: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -77,7 +78,7 @@ pub enum PlayerMessage {
         timeout: u64,
     },
     GameState {
-        players: Vec<GamePlayerStateDTO>,
+        players: Vec<GameRoomPlayerStateDTO>,
         step: PokerStep,
     },
     Blind {
@@ -204,7 +205,9 @@ async fn handle_player_inbound_message(
         Err(err) => {
             eprintln!(
                 "Player {} sent invalid action: {}, {}",
-                player_id, message.as_str(), err
+                player_id,
+                message.as_str(),
+                err
             );
         }
     }

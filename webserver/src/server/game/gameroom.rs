@@ -2,8 +2,8 @@ use crate::core::card::{Card, Owner, DECK};
 use crate::core::game::GameType;
 use crate::core::hand::compare_hands;
 use crate::server::game::player::{
-    CardDealDTO, CardOwnerDTO, CardReveallDTO, HandRevealDTO, PlayerMessage, PlayerSession,
-    PlayerWarningType,
+    CardDealDTO, CardOwnerDTO, CardReveallDTO, GameRoomPlayerStateDTO, HandRevealDTO,
+    PlayerMessage, PlayerSession, PlayerWarningType,
 };
 use axum::extract::ws::WebSocket;
 use rand;
@@ -137,8 +137,34 @@ impl GameRoom {
         message: GameRoomMessage,
         notification_sender: &mut mpsc::Sender<GameRoomStateNotification>,
     ) {
+        const INITIAL_FUNDS: u32 = 1_000;
+
         match message {
             GameRoomMessage::PlayerJoin { id, sender } => {
+                _ = sender
+                    .send(PlayerMessage::GameState {
+                        players: self
+                            .players
+                            .iter()
+                            .map(|player| GameRoomPlayerStateDTO {
+                                id: player.id.clone(),
+                                is_betting: player.state.is_betting,
+                                is_playing: player.state.is_playing,
+                                bet: player.state.bet,
+                                funds: player.state.funds,
+                            })
+                            .chain(std::iter::once(GameRoomPlayerStateDTO {
+                                id: id.clone(),
+                                is_betting: false,
+                                is_playing: false,
+                                bet: 0,
+                                funds: INITIAL_FUNDS,
+                            }))
+                            .collect(),
+                        step: PokerStep::BettingRound,
+                    })
+                    .await;
+
                 match self.players.iter_mut().find(|player| player.id == id) {
                     Some(player) => {
                         player.sender = sender;
@@ -153,7 +179,7 @@ impl GameRoom {
                                 dealt_cards: Vec::new(),
                                 bet: 0,
                                 action: PlayerGameAction::None,
-                                funds: 1_000,
+                                funds: INITIAL_FUNDS,
                             },
                         });
                     }
@@ -494,9 +520,7 @@ async fn handle_step_betting_round(
                                     player.state.funds = player.state.funds.saturating_sub(delta);
                                     player.state.bet = bet_base;
                                 } else if player.state.funds > 0 {
-                                    player.state.bet = delta
-                                        .saturating_sub(player.state.funds)
-                                        .saturating_add(player.state.bet);
+                                    player.state.bet = player.state.bet.saturating_add(player.state.funds);
                                     player.state.funds = 0;
                                 }
                             }
