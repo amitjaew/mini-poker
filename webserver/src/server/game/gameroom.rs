@@ -24,6 +24,7 @@ struct GameRoomPlayer {
 }
 
 struct GameRoom {
+    id: Uuid,
     players: Vec<GameRoomPlayer>,
     state: GameRoomState,
     game_type: GameType,
@@ -103,7 +104,7 @@ struct GameRoomConfig {
 }
 
 impl GameRoom {
-    fn new(config: GameRoomConfig) -> Self {
+    fn new(id: Uuid, config: GameRoomConfig) -> Self {
         let players = Vec::new();
         let state = GameRoomState {
             deck: DECK,
@@ -121,6 +122,7 @@ impl GameRoom {
         );
 
         Self {
+            id,
             players,
             state,
             game_type: config.game_type,
@@ -170,6 +172,8 @@ impl GameRoom {
                     PlayerAction::Update { is_playing } => {
                         if is_playing && player.state.funds >= self.min_funds {
                             player.state.is_playing = is_playing;
+                        } else {
+                            player.state.is_playing = false;
                         }
                     }
                     PlayerAction::Fold => {
@@ -255,9 +259,34 @@ async fn handle_step_blind(gameroom: &mut GameRoom) {
         player.state.bet = 0;
     }
 
-    let n_players = gameroom.players.iter().len() as u8;
-    let small_blind_idx = gameroom.state.big_blind_idx % n_players as u8;
+    assert!(
+        gameroom
+            .players
+            .iter()
+            .filter(|player| player.state.is_playing)
+            .count()
+            >= 2,
+        "At least two players should play"
+    );
+
+    let n_players = gameroom.players.len() as u8;
+    let mut small_blind_idx = gameroom.state.big_blind_idx % n_players as u8;
+    while gameroom
+        .players
+        .get(small_blind_idx as usize)
+        .is_some_and(|player| !player.state.is_playing)
+    {
+        small_blind_idx = (small_blind_idx + 1) % n_players as u8;
+    }
+
     gameroom.state.big_blind_idx = (small_blind_idx + 1) % n_players as u8;
+    while gameroom
+        .players
+        .get(gameroom.state.big_blind_idx as usize)
+        .is_some_and(|player| !player.state.is_playing)
+    {
+        gameroom.state.big_blind_idx = (gameroom.state.big_blind_idx + 1) % n_players as u8;
+    }
 
     gameroom.state.bet_base = gameroom.min_bet * 2;
 
@@ -413,8 +442,7 @@ async fn handle_step_betting_round(
 
             {
                 let mut gameroom = gameroom_mutex.lock().await;
-                let player_is_betting = gameroom.players[player_idx].state.is_betting;
-                if !player_is_betting {
+                if !gameroom.players[player_idx].state.is_betting {
                     continue;
                 }
 
@@ -461,19 +489,15 @@ async fn handle_step_betting_round(
                                 player.state.is_betting = false;
                             }
                             PlayerGameAction::Call => {
-                                let delta = bet_base - player.state.bet;
-                                if player.state.funds < delta {
-                                    is_action = false;
-                                    _ = player
-                                        .sender
-                                        .send(PlayerMessage::Warning {
-                                            warning_type: PlayerWarningType::InvalidAction,
-                                            message: "Not enough funds".to_string(),
-                                        })
-                                        .await;
-                                } else {
-                                    player.state.funds -= delta;
+                                let delta = bet_base.saturating_sub(player.state.bet);
+                                if player.state.funds >= delta {
+                                    player.state.funds = player.state.funds.saturating_sub(delta);
                                     player.state.bet = bet_base;
+                                } else if player.state.funds > 0 {
+                                    player.state.bet = delta
+                                        .saturating_sub(player.state.funds)
+                                        .saturating_add(player.state.bet);
+                                    player.state.funds = 0;
                                 }
                             }
                             PlayerGameAction::Check => {
@@ -488,8 +512,15 @@ async fn handle_step_betting_round(
                                 }
                             }
                             PlayerGameAction::Raise(raise) => {
-                                let delta = bet_base_update + raise - player.state.bet;
-                                if delta > player.state.funds {
+                                let delta = bet_base_update
+                                    .saturating_add(raise)
+                                    .saturating_sub(player.state.bet);
+
+                                if player.state.funds >= delta {
+                                    bet_base_update = bet_base_update.saturating_add(raise);
+                                    player.state.funds = player.state.funds.saturating_sub(delta);
+                                    player.state.bet = bet_base_update;
+                                } else {
                                     is_action = false;
                                     _ = player
                                         .sender
@@ -498,10 +529,7 @@ async fn handle_step_betting_round(
                                             message: "Not enough funds".to_string(),
                                         })
                                         .await;
-                                } else {
-                                    bet_base_update += raise;
-                                    player.state.funds -= delta;
-                                    player.state.bet = bet_base_update;
+                                    player.state.action = PlayerGameAction::None;
                                 }
                             }
                         }
@@ -665,6 +693,12 @@ async fn handle_step_showdown(gameroom: &mut GameRoom) {
         })
         .await;
     gameroom.state.bet_base = 0;
+
+    for player in gameroom.players.iter_mut() {
+        if player.state.is_playing && player.state.funds < gameroom.min_funds {
+            player.state.is_playing = false;
+        }
+    }
 }
 
 async fn handle_poker_step(
@@ -732,10 +766,27 @@ async fn gameroom_state_loop(
     mut notification_receiver: mpsc::Receiver<GameRoomStateNotification>,
 ) {
     loop {
-        if gameroom.lock().await.players.len() == 0 {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        if gameroom
+            .lock()
+            .await
+            .players
+            .iter()
+            .filter(|player| player.state.is_playing)
+            .count()
+            < 2
+        {
+            println!(
+                "Not enough active players at Gameroom {}, waiting...",
+                gameroom.lock().await.id
+            );
             continue;
         }
-        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        {
+            let locked = gameroom.lock().await;
+            println!("Starting {} at Gameroom {}", locked.game_type, locked.id);
+        }
 
         for step in STANDARD_POKER_STEPS {
             gameroom
@@ -756,13 +807,18 @@ pub struct GameRoomHandle {
 
 impl GameRoomHandle {
     pub async fn new(game_type: GameType) -> Self {
+        let id = Uuid::new_v4();
         let (sender, receiver) = mpsc::channel(100);
-        let gameroom_mutex = Arc::new(Mutex::new(GameRoom::new(GameRoomConfig {
-            min_bet: 10,
-            min_funds: 100,
-            turn_duration: 10,
-            game_type,
-        })));
+
+        let gameroom_mutex = Arc::new(Mutex::new(GameRoom::new(
+            id.clone(),
+            GameRoomConfig {
+                min_bet: 10,
+                min_funds: 100,
+                turn_duration: 10,
+                game_type,
+            },
+        )));
 
         let (notif_sender, notif_receiver) = mpsc::channel(10);
         tokio::spawn(gameroom_message_loop(
@@ -772,10 +828,7 @@ impl GameRoomHandle {
         ));
         tokio::spawn(gameroom_state_loop(gameroom_mutex, notif_receiver));
 
-        Self {
-            id: uuid::Uuid::new_v4(),
-            sender,
-        }
+        Self { id, sender }
     }
 
     pub async fn handle_player_connection(&self, websocket: WebSocket, player_id: Uuid) {
