@@ -1,1 +1,3 @@
 python-client-test/logs/
+python-client-test/poker_client/__pycache__/
+python-client-test/__pycache__/
