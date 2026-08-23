@@ -25,18 +25,35 @@ class PlayerState:
         self.funds -= amount
 
     def apply_action(self, action_type: str, amount: int = 0) -> None:
-        """Update funds/current_bet/bet_base for an action this player takes."""
+        """Update funds/current_bet/bet_base for an action this player takes.
+
+        Mirrors the server's Call/Raise accounting (incl. all-in Call) so the
+        local balance never goes negative and stays in sync with the server.
+        """
         self.last_action = action_type
         if action_type == "CALL":
             delta = max(0, self.bet_base - self.current_bet)
-            self.current_bet = self.bet_base
-            self.funds -= delta
+            if self.funds >= delta:
+                self.funds -= delta
+                self.current_bet = self.bet_base
+            elif self.funds > 0:
+                self.current_bet += self.funds
+                self.funds = 0
         elif action_type == "RAISE":
             new_bet = self.bet_base + amount
             delta = max(0, new_bet - self.current_bet)
-            self.current_bet = new_bet
-            self.funds -= delta
-            self.bet_base = new_bet
+            if self.funds >= delta:
+                self.funds -= delta
+                self.current_bet = new_bet
+                self.bet_base = new_bet
+
+    def apply_game_state(self, players: list) -> None:
+        """Sync authoritative funds/bet from the join-time `game_state` snapshot."""
+        for p in players:
+            if p.get("id") == self.my_id:
+                self.funds = int(p.get("funds", self.funds))
+                self.current_bet = int(p.get("bet", 0))
+                break
 
     def apply_prize(self, prize: int) -> None:
         self.funds += prize

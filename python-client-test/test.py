@@ -11,6 +11,7 @@ from poker_client.actions import choose_smart_action, random_action
 from poker_client.protocol import (
     MSG_BETTING_PLAYERS,
     MSG_BLIND,
+    MSG_GAME_STATE,
     MSG_PING,
     MSG_PLAYER_ACTION,
     MSG_PLAYER_TURN_TIMEOUT,
@@ -161,6 +162,10 @@ async def handle_message(
         await websocket.send(join)
         if verbose:
             log_verbose("send", join)
+
+    elif msg_type == MSG_GAME_STATE:
+        if state is not None:
+            state.apply_game_state(data.get("players", []))
 
     elif msg_type == MSG_STEP:
         new_step = data.get("step", "?")

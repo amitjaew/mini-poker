@@ -25,6 +25,7 @@ from poker_client.protocol import (
     MSG_BETTING_PLAYERS,
     MSG_BLIND,
     MSG_CARD_DEAL,
+    MSG_GAME_STATE,
     MSG_PING,
     MSG_PLAYER_ACTION,
     MSG_PLAYER_TURN_TIMEOUT,
@@ -90,6 +91,11 @@ async def run_agent(
                     join = encode_update(True)
                     dump("TX", join)
                     await ws.send(json.dumps(join))
+
+                elif msg_type == MSG_GAME_STATE:
+                    state.apply_game_state(data.get("players", []))
+                    upd("bet", state.current_bet)
+                    post(PlayerFundsChanged(player_index, state.funds))
 
                 elif msg_type == MSG_PING:
                     pong = encode_pong(now_ms(), data.get("server_ts", 0))
