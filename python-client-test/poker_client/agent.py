@@ -93,7 +93,7 @@ async def run_agent(
                     await ws.send(json.dumps(join))
 
                 elif msg_type == MSG_GAME_STATE:
-                    state.apply_game_state(data.get("players", []))
+                    state.apply_game_state(data.get("players", []), data.get("step"))
                     upd("bet", state.current_bet)
                     post(PlayerFundsChanged(player_index, state.funds))
 

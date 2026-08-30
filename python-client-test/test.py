@@ -165,7 +165,7 @@ async def handle_message(
 
     elif msg_type == MSG_GAME_STATE:
         if state is not None:
-            state.apply_game_state(data.get("players", []))
+            state.apply_game_state(data.get("players", []), data.get("step"))
 
     elif msg_type == MSG_STEP:
         new_step = data.get("step", "?")

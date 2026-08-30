@@ -7,6 +7,7 @@ ACTION_CALL = "call"
 ACTION_RAISE = "raise"
 ACTION_PONG = "pong"
 ACTION_UPDATE = "update"
+ACTION_STATUS_REQUEST = "status_request"
 
 # ── Server → Client message types
 MSG_SESSION = "session"
@@ -42,6 +43,10 @@ def encode_pong(client_ts: int, server_ts: int) -> dict:
 
 def encode_update(is_playing: bool) -> dict:
     return {"type": ACTION_UPDATE, "is_playing": is_playing}
+
+
+def encode_status_request() -> dict:
+    return {"type": ACTION_STATUS_REQUEST}
 
 
 def parse_player_action(action, bet_base: int) -> tuple[str, int]:

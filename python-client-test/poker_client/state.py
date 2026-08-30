@@ -47,8 +47,10 @@ class PlayerState:
                 self.current_bet = new_bet
                 self.bet_base = new_bet
 
-    def apply_game_state(self, players: list) -> None:
+    def apply_game_state(self, players: list, step: Optional[str] = None) -> None:
         """Sync authoritative funds/bet from the join-time `game_state` snapshot."""
+        if step is not None:
+            self.step = step
         for p in players:
             if p.get("id") == self.my_id:
                 self.funds = int(p.get("funds", self.funds))
