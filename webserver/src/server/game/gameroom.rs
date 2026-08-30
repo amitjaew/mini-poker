@@ -278,7 +278,7 @@ impl GameRoom {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum PokerStep {
     Blind,
@@ -478,9 +478,15 @@ async fn handle_step_betting_round(
 ) {
     loop {
         let n_players: usize;
+        let mut n_active_players: usize;
         {
             let gameroom = gameroom_mutex.lock().await;
             n_players = gameroom.players.len();
+            n_active_players = gameroom
+                .players
+                .iter()
+                .filter(|player| player.state.is_betting)
+                .count();
         }
 
         for player_idx in 0..n_players {
@@ -489,7 +495,11 @@ async fn handle_step_betting_round(
 
             {
                 let mut gameroom = gameroom_mutex.lock().await;
-                if !gameroom.players[player_idx].state.is_betting {
+                if !gameroom.players[player_idx].state.is_betting
+                    || gameroom.players[player_idx].state.funds == 0
+                    || (n_active_players < 2
+                        && gameroom.players[player_idx].state.bet == gameroom.state.bet_base)
+                {
                     continue;
                 }
 
@@ -534,6 +544,7 @@ async fn handle_step_betting_round(
                             }
                             PlayerGameAction::Fold => {
                                 player.state.is_betting = false;
+                                n_active_players = n_active_players.saturating_sub(1);
                             }
                             PlayerGameAction::Call => {
                                 let delta = bet_base.saturating_sub(player.state.bet);
@@ -604,8 +615,12 @@ async fn handle_step_betting_round(
 
                 match gameroom.players.get_mut(player_idx) {
                     Some(player) => {
-                        if player.state.bet < bet_base && player.state.is_betting {
+                        if player.state.bet < bet_base
+                            && player.state.is_betting
+                            && player.state.funds > 0
+                        {
                             player.state.is_betting = false;
+                            n_active_players = n_active_players.saturating_sub(1);
                             let player_id = player.id;
                             gameroom
                                 .broadcast(PlayerMessage::PlayerTurnTimeout { player: player_id })
@@ -624,7 +639,9 @@ async fn handle_step_betting_round(
                 .iter()
                 .filter(|player| player.state.is_betting);
             if active_players.clone().count() <= 1
-                || active_players.all(|player| player.state.bet == gameroom.state.bet_base)
+                || active_players.all(|player| {
+                    player.state.bet == gameroom.state.bet_base || player.state.funds == 0
+                })
             {
                 break;
             }
@@ -639,6 +656,11 @@ async fn handle_step_showdown(gameroom: &mut GameRoom) {
         .enumerate()
         .filter_map(|(idx, player)| player.state.is_betting.then_some(idx))
         .collect();
+
+    assert!(
+        end_players.len() > 1,
+        "Showdown requires more than 1 player. Unconstested pots should be handled interrupting game loop before Showdown."
+    );
 
     let hands: Vec<Vec<Card>> = end_players
         .iter()
@@ -747,11 +769,63 @@ async fn handle_step_showdown(gameroom: &mut GameRoom) {
     }
 }
 
+async fn award_unconstested_pot(gameroom: &mut GameRoom) -> bool {
+    let active: Vec<usize> = gameroom
+        .players
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, player)| player.state.is_betting.then_some(idx))
+        .collect();
+
+    if active.len() != 1 {
+        return false;
+    }
+
+    let winner_idx = active[0];
+    let bet_cap = gameroom.players[winner_idx].state.bet;
+
+    let pot: u32 = gameroom
+        .players
+        .iter_mut()
+        .enumerate()
+        .map(|(idx, player)| {
+            if idx != winner_idx && player.state.bet > bet_cap {
+                let delta = player.state.bet.saturating_sub(bet_cap);
+                player.state.bet = player.state.bet.saturating_sub(delta);
+                player.state.funds = player.state.funds.saturating_add(delta);
+            }
+            player.state.bet
+        })
+        .sum();
+
+    let winner = gameroom.players.get_mut(winner_idx).unwrap();
+    winner.state.funds = winner.state.funds.saturating_add(pot);
+
+    gameroom.state.bet_base = 0;
+    for player in gameroom.players.iter_mut() {
+        player.state.bet = 0;
+        player.state.is_betting = false;
+        if player.state.is_playing && player.state.funds < gameroom.min_funds {
+            player.state.is_playing = false;
+        }
+    }
+
+    gameroom
+        .broadcast(PlayerMessage::Result {
+            winners: vec![gameroom.players[winner_idx].id.clone()],
+            prizes: vec![pot],
+            player_hands: vec![],
+        })
+        .await;
+
+    true
+}
+
 async fn handle_poker_step(
     step: PokerStep,
     gameroom_mutex: Arc<Mutex<GameRoom>>,
     notification_receiver: &mut mpsc::Receiver<GameRoomStateNotification>,
-) {
+) -> bool {
     for player in gameroom_mutex.lock().await.players.iter_mut() {
         player.state.action = PlayerGameAction::None;
     }
@@ -775,9 +849,14 @@ async fn handle_poker_step(
             handle_step_showdown(&mut *gameroom_mutex.lock().await).await;
         }
         PokerStep::BettingRound => {
-            handle_step_betting_round(gameroom_mutex, notification_receiver).await;
+            handle_step_betting_round(gameroom_mutex.clone(), notification_receiver).await;
+            if award_unconstested_pot(&mut *gameroom_mutex.lock().await).await {
+                return false;
+            }
         }
     }
+
+    true
 }
 
 const STANDARD_POKER_STEPS: [PokerStep; 10] = [
@@ -835,14 +914,33 @@ async fn gameroom_state_loop(
         }
 
         for step in STANDARD_POKER_STEPS {
-            gameroom
-                .lock()
-                .await
-                .broadcast(PlayerMessage::Step { step: step.clone() })
-                .await;
+            {
+                let mut locked = gameroom.lock().await;
+                let active_players = locked
+                    .players
+                    .iter()
+                    .filter(|player| player.state.is_betting)
+                    .count();
+                if step != PokerStep::Showdown && step != PokerStep::Blind && active_players < 2 {
+                    continue;
+                }
+                if step != PokerStep::BettingRound {
+                    locked.state.step = Some(step.clone());
+                }
 
-            handle_poker_step(step, gameroom.clone(), &mut notification_receiver).await;
+                locked
+                    .broadcast(PlayerMessage::Step { step: step.clone() })
+                    .await;
+            }
+
+            let should_continue =
+                handle_poker_step(step, gameroom.clone(), &mut notification_receiver).await;
+            if !should_continue {
+                break;
+            }
         }
+
+        gameroom.lock().await.state.step = None;
     }
 }
 
