@@ -10,7 +10,9 @@ use tokio;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::server::game::gameroom::{GameRoomMessage, PlayerAction, PlayerGameAction, PokerStep};
+use crate::server::game::gameroom::{
+    GameRoomMessage, GameRoomPlayerPayload, PlayerGameAction, PokerStep,
+};
 
 pub struct PlayerSession {
     pub id: uuid::Uuid,
@@ -79,7 +81,7 @@ pub enum PlayerMessage {
     },
     GameState {
         players: Vec<GameRoomPlayerStateDTO>,
-        step: PokerStep,
+        step: Option<PokerStep>,
     },
     Blind {
         small_blind_player: Uuid,
@@ -193,7 +195,7 @@ async fn handle_player_inbound_message(
     let Message::Text(message) = unparsed_message else {
         return;
     };
-    match serde_json::from_str::<PlayerAction>(message.as_str()) {
+    match serde_json::from_str::<GameRoomPlayerPayload>(message.as_str()) {
         Ok(payload) => {
             let _ = sender
                 .send(GameRoomMessage::PlayerAction {

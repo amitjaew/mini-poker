@@ -49,6 +49,7 @@ struct GameRoomState {
     bet_base: u32,
     current_player_turn: Option<Uuid>,
     current_player_timeout: Option<SystemTime>,
+    step: Option<PokerStep>,
 }
 
 #[derive(Clone)]
@@ -72,18 +73,19 @@ pub enum PlayerGameAction {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum PlayerAction {
+pub enum GameRoomPlayerPayload {
     Fold,
     Check,
     Call,
     Raise { amount: u32 },
     Pong { client_ts: u64, server_ts: u64 },
     Update { is_playing: bool },
+    StatusRequest,
 }
 
 pub enum GameRoomMessage {
     PlayerAction {
-        payload: PlayerAction,
+        payload: GameRoomPlayerPayload,
         from: uuid::Uuid,
     },
     PlayerJoin {
@@ -114,6 +116,7 @@ impl GameRoom {
             bet_base: 0,
             current_player_turn: None,
             current_player_timeout: None,
+            step: None,
         };
 
         assert!(
@@ -161,7 +164,7 @@ impl GameRoom {
                                 funds: INITIAL_FUNDS,
                             }))
                             .collect(),
-                        step: PokerStep::BettingRound,
+                        step: self.state.step.clone(),
                     })
                     .await;
 
@@ -188,53 +191,71 @@ impl GameRoom {
             GameRoomMessage::PlayerAction { from, payload } => {
                 println!("Gameroom received {:?} from Player {}", payload, from);
 
-                let mut _player = self.players.iter_mut().find(|player| player.id == from);
-                if _player.is_none() {
-                    return;
-                }
-                let player = _player.unwrap();
+                let player_idx = match self.players.iter().position(|player| player.id == from) {
+                    Some(idx) => idx,
+                    None => return,
+                };
 
                 match payload {
-                    PlayerAction::Update { is_playing } => {
-                        if is_playing && player.state.funds >= self.min_funds {
-                            player.state.is_playing = is_playing;
+                    GameRoomPlayerPayload::Update { is_playing } => {
+                        if is_playing && self.players[player_idx].state.funds >= self.min_funds {
+                            self.players[player_idx].state.is_playing = is_playing;
                         } else {
-                            player.state.is_playing = false;
+                            self.players[player_idx].state.is_playing = false;
                         }
                     }
-                    PlayerAction::Fold => {
-                        player.state.action = PlayerGameAction::Fold;
+                    GameRoomPlayerPayload::Fold => {
+                        self.players[player_idx].state.action = PlayerGameAction::Fold;
                         _ = notification_sender
                             .send(GameRoomStateNotification {
                                 content: "player updated".to_string(),
                             })
                             .await;
                     }
-                    PlayerAction::Call => {
-                        player.state.action = PlayerGameAction::Call;
+                    GameRoomPlayerPayload::Call => {
+                        self.players[player_idx].state.action = PlayerGameAction::Call;
                         _ = notification_sender
                             .send(GameRoomStateNotification {
                                 content: "player updated".to_string(),
                             })
                             .await;
                     }
-                    PlayerAction::Check => {
-                        player.state.action = PlayerGameAction::Check;
+                    GameRoomPlayerPayload::Check => {
+                        self.players[player_idx].state.action = PlayerGameAction::Check;
                         _ = notification_sender
                             .send(GameRoomStateNotification {
                                 content: "player updated".to_string(),
                             })
                             .await;
                     }
-                    PlayerAction::Raise { amount } => {
-                        player.state.action = PlayerGameAction::Raise(amount);
+                    GameRoomPlayerPayload::Raise { amount } => {
+                        self.players[player_idx].state.action = PlayerGameAction::Raise(amount);
                         _ = notification_sender
                             .send(GameRoomStateNotification {
                                 content: "player updated".to_string(),
                             })
                             .await;
                     }
-                    PlayerAction::Pong {
+                    GameRoomPlayerPayload::StatusRequest => {
+                        _ = self.players[player_idx]
+                            .sender
+                            .send(PlayerMessage::GameState {
+                                players: self
+                                    .players
+                                    .iter()
+                                    .map(|player| GameRoomPlayerStateDTO {
+                                        id: player.id.clone(),
+                                        is_betting: player.state.is_betting,
+                                        is_playing: player.state.is_playing,
+                                        bet: player.state.bet,
+                                        funds: player.state.funds,
+                                    })
+                                    .collect(),
+                                step: self.state.step.clone(),
+                            })
+                            .await;
+                    }
+                    GameRoomPlayerPayload::Pong {
                         client_ts,
                         server_ts,
                     } => {
@@ -246,7 +267,7 @@ impl GameRoom {
                                     client_ts,
                                     server_ack_ts: duration.as_millis() as u64,
                                 };
-                                let _ = player.sender.send(server_payload).await;
+                                let _ = self.players[player_idx].sender.send(server_payload).await;
                             }
                             Err(_) => {}
                         }
@@ -520,7 +541,8 @@ async fn handle_step_betting_round(
                                     player.state.funds = player.state.funds.saturating_sub(delta);
                                     player.state.bet = bet_base;
                                 } else if player.state.funds > 0 {
-                                    player.state.bet = player.state.bet.saturating_add(player.state.funds);
+                                    player.state.bet =
+                                        player.state.bet.saturating_add(player.state.funds);
                                     player.state.funds = 0;
                                 }
                             }
