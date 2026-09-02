@@ -99,8 +99,8 @@ pub enum PlayerMessage {
         bet_base: u32,
     },
     Result {
-        winners: Vec<Uuid>,
-        prizes: Vec<u32>,
+        prizes: Vec<(Uuid, u32)>,
+        refunds: Vec<(Uuid, u32)>,
         player_hands: Vec<HandRevealDTO>,
     },
     Warning {

@@ -82,10 +82,12 @@ def log_action_sent(action: str):
     print(f"  {YL}>{R} {B}{t}{R}{extra}")
 
 
-def log_result(winners: list, prizes: list):
+def log_result(prizes: list, refunds: list):
     print(f"\n{B}{MG}== RESULT =={R}")
-    for uid, prize in zip(winners, prizes):
+    for uid, prize in prizes:
         print(f"   {GR}winner{R} {short(uid)}  prize={B}{prize}{R}")
+    for uid, amount in refunds:
+        print(f"   {DIM}refund{R} {short(uid)}  +{B}{amount}{R}")
 
 
 def log_warning(warning_type: dict, message: str):
@@ -244,10 +246,18 @@ async def handle_message(
             log_player_action(acted_pid, action_name, new_bet_base)
 
     elif msg_type == MSG_RESULT:
+        prizes = data.get("prizes", [])
+        refunds = data.get("refunds", [])
         if state is not None:
             state.reset_hand()
+            for uid, amount in prizes:
+                if uid == state.my_id:
+                    state.apply_prize(amount)
+            for uid, amount in refunds:
+                if uid == state.my_id:
+                    state.apply_refund(amount)
         if not verbose:
-            log_result(data.get("winners", []), data.get("prizes", []))
+            log_result(prizes, refunds)
 
     elif msg_type == MSG_WARNING:
         if not verbose:

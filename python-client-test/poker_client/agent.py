@@ -223,19 +223,33 @@ async def run_agent(
                         log(f"[magenta]{short(acted_pid)}[/] → [bold]{action_name}[/]")
 
                 elif msg_type == MSG_RESULT:
-                    winners = data.get("winners", [])
                     prizes = data.get("prizes", [])
+                    refunds = data.get("refunds", [])
                     state.reset_hand()
                     upd("cards", "")
                     post(CommunityCardsUpdated(""))
-                    if state.my_id in winners:
-                        idx = winners.index(state.my_id)
-                        prize = prizes[idx] if idx < len(prizes) else 0
-                        state.apply_prize(prize)
-                        post(PlayerFundsChanged(player_index, state.funds))
-                        log(f"[green bold]P{player_index + 1} WON +{prize}![/]")
+
+                    won = 0
+                    for entry in prizes:
+                        if entry and entry[0] == state.my_id:
+                            won = int(entry[1])
+                            break
+                    refunded = 0
+                    for entry in refunds:
+                        if entry and entry[0] == state.my_id:
+                            refunded = int(entry[1])
+                            break
+
+                    if won:
+                        state.apply_prize(won)
+                        log(f"[green bold]P{player_index + 1} WON +{won}![/]")
                     else:
                         log(f"[dim]P{player_index + 1} lost this hand[/]")
+                    if refunded:
+                        state.apply_refund(refunded)
+                        log(f"[dim]P{player_index + 1} refunded +{refunded}[/dim]")
+
+                    post(PlayerFundsChanged(player_index, state.funds))
                     for hand in data.get("player_hands", []):
                         pid = hand.get("player_id", "")
                         log(f"[dim]{short(pid)} showed: {fmt_cards(hand.get('cards', []))}[/dim]")

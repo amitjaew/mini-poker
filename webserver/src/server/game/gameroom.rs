@@ -697,12 +697,15 @@ async fn handle_step_showdown(gameroom: &mut GameRoom) {
         .max_by_key(|(_, _, bet)| bet)
         .map_or(0, |(_, _, bet)| *bet);
 
+    let mut refunds: Vec<(Uuid, u32)> = Vec::new();
     let bet_pool: u32 = gameroom
         .players
         .iter_mut()
         .map(|player| {
             if player.state.bet > bet_cap {
-                player.state.funds += player.state.bet - bet_cap;
+                let refund_amount = player.state.bet.saturating_sub(bet_cap);
+                player.state.funds = player.state.funds.saturating_add(refund_amount);
+                refunds.push((player.id.clone(), refund_amount));
                 return bet_cap;
             }
             player.state.bet
@@ -755,8 +758,12 @@ async fn handle_step_showdown(gameroom: &mut GameRoom) {
 
     gameroom
         .broadcast(PlayerMessage::Result {
-            winners: winners.iter().map(|(_, id, _)| id.to_owned()).collect(),
-            prizes,
+            prizes: winners
+                .iter()
+                .enumerate()
+                .map(|(i, (_, id, _))| (id.clone(), prizes[i]))
+                .collect(),
+            refunds,
             player_hands,
         })
         .await;
@@ -812,8 +819,8 @@ async fn award_unconstested_pot(gameroom: &mut GameRoom) -> bool {
 
     gameroom
         .broadcast(PlayerMessage::Result {
-            winners: vec![gameroom.players[winner_idx].id.clone()],
-            prizes: vec![pot],
+            prizes: vec![(gameroom.players[winner_idx].id.clone(), pot)],
+            refunds: vec![],
             player_hands: vec![],
         })
         .await;

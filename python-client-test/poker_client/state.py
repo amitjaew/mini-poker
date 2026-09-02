@@ -60,6 +60,9 @@ class PlayerState:
     def apply_prize(self, prize: int) -> None:
         self.funds += prize
 
+    def apply_refund(self, amount: int) -> None:
+        self.funds += amount
+
     def reset_hand(self) -> None:
         self.bet_base = 0
         self.current_bet = 0
