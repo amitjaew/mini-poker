@@ -565,7 +565,6 @@ async fn handle_step_betting_round(
                                         message: "Cannot check".to_owned(),
                                     };
                                     let _ = player.sender.send(warning).await;
-                                    player.state.action = PlayerGameAction::None;
                                 }
                             }
                             PlayerGameAction::Raise(raise) => {
@@ -586,7 +585,6 @@ async fn handle_step_betting_round(
                                             message: "Not enough funds".to_string(),
                                         })
                                         .await;
-                                    player.state.action = PlayerGameAction::None;
                                 }
                             }
                         }
@@ -595,6 +593,7 @@ async fn handle_step_betting_round(
                             action: player.state.action.clone(),
                             bet_base: bet_base_update,
                         });
+                        player.state.action = PlayerGameAction::None;
                     }
                     None => {
                         is_action = false;
