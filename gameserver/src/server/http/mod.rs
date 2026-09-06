@@ -1,8 +1,4 @@
-use axum::{
-    extract::ws::{WebSocket, WebSocketUpgrade},
-    response::Response,
-    routing, Router,
-};
+use axum::{extract::ws::WebSocketUpgrade, response::Response, routing, Router};
 
 use crate::{core::game::GameType, server::game::gameserver::GameServerHandle};
 
@@ -21,19 +17,17 @@ pub async fn start(rooms: Vec<GameType>) {
         ws: WebSocketUpgrade,
         gameserver_handle: GameServerHandle,
     ) -> Response {
-        ws.on_upgrade(move |socket| handle_socket(socket, gameserver_handle))
-    }
-
-    async fn handle_socket(websocket: WebSocket, gameserver_handle: GameServerHandle) {
-        let rooms = gameserver_handle.list_gamerooms().await;
-        if rooms.len() > 0 {
-            gameserver_handle.player_join(websocket, rooms[0].id).await;
-        }
+        ws.on_upgrade(async move |socket| {
+            let rooms = gameserver_handle.list_gamerooms().await;
+            if rooms.len() > 0 {
+                gameserver_handle.player_join(socket, rooms[0].id).await;
+            }
+        })
     }
 
     let app = Router::new().route(
         "/ws",
-        routing::any(move |ws| player_conn_handler(ws, gameserver_handle.clone())),
+        routing::any(move |ws| player_conn_handler(ws, gameserver_handle)),
     );
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
