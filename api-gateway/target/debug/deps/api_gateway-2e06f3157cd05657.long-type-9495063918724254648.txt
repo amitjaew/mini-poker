@@ -1,2 +1,0 @@
-fn(axum::extract::Path<Uuid>) -> impl std::future::Future<Output = axum::Json<Value>> {get_account}
-fn(axum::extract::Path<Uuid>) -> impl std::future::Future<Output = axum::Json<Value>> {get_account}: Handler<_, _>
