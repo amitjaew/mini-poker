@@ -1,0 +1,1 @@
+/home/master/Projects/mini-poker/api-gateway/target/debug/api-gateway: /home/master/Projects/mini-poker/api-gateway/src/main.rs /home/master/Projects/mini-poker/api-gateway/src/routes/account.rs /home/master/Projects/mini-poker/api-gateway/src/routes.rs
