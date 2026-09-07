@@ -8,7 +8,7 @@ use axum::{
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::{schemas::UserDTO, state::AppState};
+use crate::{schema::user::UserDTO, state::AppState};
 
 async fn get_account(Path(id): Path<Uuid>, State(state): State<Arc<AppState>>) -> Json<Value> {
     println!("id: {}", id.to_string());

@@ -1,10 +1,11 @@
+mod config;
 mod routes;
-mod schemas;
+mod schema;
 mod state;
 
 use axum::{Json, Router, routing::get};
 
-use crate::{routes::account::account_router, state::init_state};
+use crate::{config::init_config, routes::account::account_router, state::init_state};
 
 async fn health() -> Json<serde_json::Value> {
     Json(serde_json::json!({
@@ -14,15 +15,16 @@ async fn health() -> Json<serde_json::Value> {
 
 #[tokio::main]
 async fn main() {
-    println!("TEST");
-    let state = init_state().await;
+    println!("STARTING API");
+    let config = init_config();
+    let state = init_state(&config).await;
 
     let app = Router::new()
         .route("/health", get(health))
         .nest("/account", account_router())
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:8000").await;
+    let listener = tokio::net::TcpListener::bind(config.server_url).await;
     if !listener.is_ok() {
         return;
     }
