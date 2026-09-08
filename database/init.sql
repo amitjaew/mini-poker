@@ -7,10 +7,10 @@ DROP TYPE IF EXISTS casino_game_type_enum;
 DROP TYPE IF EXISTS balance_movement_type_enum;
 DROP TYPE IF EXISTS currency_enum;
 
-CREATE TYPE currency_enum AS ENUM ('BTC', 'ETH', 'USDC', 'XMR', 'VIRTUAL');
-CREATE TYPE balance_movement_type_enum AS ENUM ('DEPOSIT', 'WIDRAWAL', 'PRICE', 'BET');
-CREATE TYPE casino_game_type_enum AS ENUM ('SLOTS', 'POKER');
-CREATE TYPE balance_movement_status_enum AS ENUM ('PENDING', 'APPROVED', 'CANCELED');
+CREATE TYPE currency_enum AS ENUM ('btc', 'eth', 'usdc', 'xmr', 'virtual');
+CREATE TYPE balance_movement_type_enum AS ENUM ('deposit', 'widrawal', 'room_deposit', 'room_widrawal', 'prize', 'bet');
+CREATE TYPE casino_game_type_enum AS ENUM ('slots', 'poker');
+CREATE TYPE balance_movement_status_enum AS ENUM ('pending', 'approved', 'canceled');
 
 CREATE TABLE users (
     id              UUID PRIMARY KEY,
@@ -25,8 +25,8 @@ CREATE TABLE users (
 CREATE TABLE users_balance (
     id              UUID PRIMARY KEY,
     user_id         UUID NOT NULL REFERENCES users(id),
-    currency        currency_enum NOT NULL DEFAULT 'BTC',
-    amount          NUMERIC(18, 8) NOT NULL
+    currency        currency_enum NOT NULL DEFAULT 'virtual',
+    amount          BIGINT NOT NULL DEFAULT 0
 );
 
 CREATE INDEX idx_users_balance_user_id ON users_balance (user_id);
@@ -35,11 +35,11 @@ CREATE TABLE balance_movements (
     id              UUID PRIMARY KEY,
     balance_id      UUID NOT NULL REFERENCES users_balance(id),
     wallet_address  VARCHAR(255),
-    amount          NUMERIC(16, 8) NOT NULL,
-    type            balance_movement_type_enum NOT NULL,
+    amount          BIGINT NOT NULL,
+    movement_type  balance_movement_type_enum NOT NULL,
     game_type       casino_game_type_enum,
     game_name       VARCHAR(255),
-    status          balance_movement_status_enum NOT NULL DEFAULT 'PENDING',
+    status          balance_movement_status_enum NOT NULL DEFAULT 'pending',
     created_at      TIMESTAMP NOT NULL DEFAULT now()
 );
 
