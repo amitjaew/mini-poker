@@ -1,6 +1,7 @@
 use sqlx::types::time::PrimitiveDateTime;
 use uuid::Uuid;
 
+#[derive(serde::Serialize)]
 pub struct UserDTO {
     pub id: Uuid,
     pub email: String,
@@ -11,6 +12,7 @@ pub struct UserDTO {
     pub created_at: PrimitiveDateTime,
 }
 
+#[derive(serde::Serialize)]
 pub struct UserBalanceDTO {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -18,6 +20,7 @@ pub struct UserBalanceDTO {
     pub amount: i64,
 }
 
+#[derive(serde::Serialize)]
 pub struct BalanceMovement {
     pub id: Uuid,
     pub balance_id: Uuid,
@@ -30,14 +33,14 @@ pub struct BalanceMovement {
     pub created_at: PrimitiveDateTime,
 }
 
-#[derive(sqlx::Type)]
+#[derive(sqlx::Type, serde::Serialize)]
 #[sqlx(type_name = "casino_game_type_enum", rename_all = "snake_case")]
 pub enum GameType {
     Slots,
     Poker,
 }
 
-#[derive(sqlx::Type)]
+#[derive(sqlx::Type, serde::Serialize)]
 #[sqlx(type_name = "balance_movement_type_enum", rename_all = "snake_case")]
 pub enum BalanceMovementType {
     Deposit,
@@ -48,7 +51,7 @@ pub enum BalanceMovementType {
     Bet,
 }
 
-#[derive(sqlx::Type)]
+#[derive(sqlx::Type, serde::Serialize)]
 #[sqlx(type_name = "currency_enum", rename_all = "snake_case")]
 pub enum Currency {
     BTC,
@@ -58,7 +61,7 @@ pub enum Currency {
     Virtual,
 }
 
-#[derive(sqlx::Type)]
+#[derive(sqlx::Type, serde::Serialize)]
 #[sqlx(type_name = "balance_movement_status_enum", rename_all = "snake_case")]
 pub enum BalanceMovementStatus {
     Pending,

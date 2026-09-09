@@ -18,28 +18,34 @@ use crate::{
 
 async fn get_account(Path(id): Path<Uuid>, State(state): State<Arc<AppState>>) -> Json<Value> {
     println!("id: {}", id.to_string());
-    let result = sqlx::query_as!(UserDTO, r"SELECT * FROM users WHERE id=$1", id)
+    let user_query = sqlx::query_as!(UserDTO, r"SELECT * FROM users WHERE id=$1", id)
         .fetch_one(&state.db_pool)
         .await;
 
-    let balances = sqlx::query_as!(
+    let balances_query = sqlx::query_as!(
         UserBalanceDTO,
         r#"SELECT id, user_id, currency as "currency: Currency", amount FROM users_balance"#
     )
-    .fetch_all(&state.db_pool);
-    let movements = sqlx::query_as!(
+    .fetch_all(&state.db_pool)
+    .await;
+    let movements_query = sqlx::query_as!(
         BalanceMovement,
         r#"SELECT id, balance_id, wallet_address, amount, movement_type as "movement_type: BalanceMovementType", game_type as "game_type: GameType", game_name, status as "status: BalanceMovementStatus", created_at FROM balance_movements"#
-    ).fetch_all(&state.db_pool);
+    ).fetch_all(&state.db_pool).await;
 
-    match result {
-        Ok(user) => Json(json!({
-           "id": &user.id,
-           "created_at": &user.created_at.to_string()
-        })),
-        Err(err) => Json(json!({
-            "status": &err.to_string()
-        })),
+    match (user_query, balances_query, movements_query) {
+        (Ok(user), Ok(balances), Ok(movements)) => {
+            return Json(json!({
+                "user": user,
+                "movements": movements,
+                "balances": balances
+            }));
+        }
+        _ => {
+            return Json(json!({
+                "status": "not found"
+            }));
+        }
     }
 }
 
