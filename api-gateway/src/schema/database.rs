@@ -1,7 +1,7 @@
 use sqlx::types::time::PrimitiveDateTime;
 use uuid::Uuid;
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone)]
 pub struct UserDTO {
     pub id: Uuid,
     pub email: String,
