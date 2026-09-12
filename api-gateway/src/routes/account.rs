@@ -4,18 +4,25 @@ use argon2::{Argon2, PasswordHasher};
 use axum::{
     Json, Router,
     extract::{Path, State},
-    routing,
+    middleware, routing,
 };
 use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::{
+    auth::authorization_middleware,
     schema::database::{
         BalanceMovement, BalanceMovementStatus, BalanceMovementType, Currency, GameType,
         UserBalanceDTO, UserDTO,
     },
     state::AppState,
 };
+
+/*
+ * TODO:
+ * - Complete personal account CRUD
+ * - User profile view
+ */
 
 async fn get_account(Path(id): Path<Uuid>, State(state): State<Arc<AppState>>) -> Json<Value> {
     println!("id: {}", id.to_string());
@@ -109,6 +116,11 @@ async fn create_account(
     }
 }
 
-pub fn account_router() -> Router<Arc<AppState>> {
-    Router::new().route("/{id}", routing::get(get_account))
+pub fn account_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/{id}", routing::get(get_account))
+        .route_layer(middleware::from_fn_with_state(
+            state,
+            authorization_middleware,
+        ))
 }

@@ -1,1 +1,5 @@
-// TODO: cross comunication with Gameserver
+/*
+ * TODO:
+ * - Gameroom fund deposit attempt
+ * - Gameroom fund widrawal attempt
+ */
