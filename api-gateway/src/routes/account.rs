@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use argon2::{Argon2, PasswordHasher};
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use axum::{
     Extension, Json, Router,
     extract::{Path, State},
@@ -9,6 +9,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+use sqlx::{query, query_scalar};
 use uuid::Uuid;
 
 use crate::{
@@ -20,12 +21,6 @@ use crate::{
     state::AppState,
 };
 
-/*
- * TODO:
- * - Complete personal account CRUD
- * - User profile view
- */
-
 async fn get_account(
     Path(id): Path<Uuid>,
     State(state): State<Arc<AppState>>,
@@ -34,19 +29,6 @@ async fn get_account(
         .fetch_one(&state.db_pool)
         .await;
 
-    // let balances_query = sqlx::query_as!(
-    //     UserBalanceDTO,
-    //     r#"SELECT id, user_id, currency as "currency: Currency", amount FROM users_balance"#
-    // )
-    // .fetch_all(&state.db_pool)
-    // .await;
-    // let movements_query = sqlx::query_as!(
-    //     BalanceMovement,
-    //     r#"SELECT id, balance_id, wallet_address, amount, movement_type as "movement_type: BalanceMovementType", game_type as "game_type: GameType", game_name, status as "status: BalanceMovementStatus", created_at FROM balance_movements"#
-    // ).fetch_all(&state.db_pool).await;
-
-    // match (user_query, balances_query, movements_query) {
-    // (Ok(user), Ok(balances), Ok(movements)) => {
     match user_query {
         Ok(user) => {
             return Ok(Json(json!(ShallowUserDTO {
@@ -128,18 +110,190 @@ async fn create_account(
     }
 }
 
-async fn get_my_account(Extension(user): Extension<UserDTO>) -> Json<Value> {
+async fn get_personal_account(Extension(user): Extension<UserDTO>) -> Json<Value> {
     Json(json!(user))
 }
 
+#[derive(Deserialize, Debug)]
+struct UpdatePersonalAccountPasswordDTO {
+    old_password: String,
+    new_password: String,
+}
+async fn update_personal_account_password(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<UserDTO>,
+    Json(payload): Json<UpdatePersonalAccountPasswordDTO>,
+) -> Result<Json<Value>, AppError> {
+    let argon2 = Argon2::default();
+
+    let old_password_hash = match PasswordHash::new(&user.password_hash) {
+        Ok(hash) => hash,
+        Err(_) => {
+            return Err(AppError {
+                message: String::new(),
+                status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            });
+        }
+    };
+
+    match argon2.verify_password(&payload.old_password.into_bytes(), &old_password_hash) {
+        Ok(()) => {}
+        Err(password_hash::Error::PasswordInvalid) => {
+            return Err(AppError {
+                message: "invalid password".to_string(),
+                status_code: StatusCode::UNAUTHORIZED,
+            });
+        }
+        Err(_) => {
+            return Err(AppError {
+                message: String::new(),
+                status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            });
+        }
+    }
+
+    let new_password_hash = match argon2.hash_password(&payload.new_password.into_bytes()) {
+        Ok(value) => value,
+        Err(_) => {
+            return Err(AppError {
+                message: String::new(),
+                status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            });
+        }
+    }
+    .to_string();
+
+    match query!(
+        "UPDATE users SET password_hash=$1 WHERE id=$2",
+        new_password_hash,
+        user.id
+    )
+    .execute(&state.db_pool)
+    .await
+    {
+        Ok(value) => {
+            if value.rows_affected() == 0 {
+                return Err(AppError {
+                    message: "user not found".to_string(),
+                    status_code: StatusCode::NOT_FOUND,
+                });
+            }
+            return Ok(Json(json!({"status": "success"})));
+        }
+        Err(_) => {
+            return Err(AppError {
+                message: String::new(),
+                status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            });
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
+struct UpdateUsernameDTO {
+    username: String,
+}
+async fn update_personal_account_username(
+    Extension(user): Extension<UserDTO>,
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<UpdateUsernameDTO>,
+) -> Result<Json<Value>, AppError> {
+    match query_scalar!(
+        r"SELECT EXISTS(SELECT 1 FROM users WHERE username=$1)",
+        payload.username,
+    )
+    .fetch_optional(&state.db_pool)
+    .await
+    {
+        Ok(Some(Some(exists))) => {
+            if exists {
+                return Err(AppError {
+                    message: "username already exists".to_string(),
+                    status_code: StatusCode::CONFLICT,
+                });
+            }
+        }
+        _ => {
+            return Err(AppError {
+                message: String::new(),
+                status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            });
+        }
+    }
+
+    match query!(
+        "UPDATE users SET username=$1 WHERE id=$2",
+        payload.username,
+        user.id
+    )
+    .execute(&state.db_pool)
+    .await
+    {
+        Ok(value) => {
+            if value.rows_affected() == 0 {
+                return Err(AppError {
+                    message: "user not found".to_string(),
+                    status_code: StatusCode::NOT_FOUND,
+                });
+            }
+            return Ok(Json(json!({"status": "success"})));
+        }
+        Err(_) => {
+            return Err(AppError {
+                message: String::new(),
+                status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            });
+        }
+    }
+}
+
+async fn delete_personal_account(
+    Extension(user): Extension<UserDTO>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, AppError> {
+    match query!("DELETE FROM users WHERE id=$1", user.id)
+        .execute(&state.db_pool)
+        .await
+    {
+        Ok(value) => {
+            if value.rows_affected() == 0 {
+                return Err(AppError {
+                    message: "user not found".to_string(),
+                    status_code: StatusCode::NOT_FOUND,
+                });
+            }
+            return Ok(Json(json!({"status": "success"})));
+        }
+        Err(_) => {
+            return Err(AppError {
+                message: String::new(),
+                status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            });
+        }
+    }
+}
+
 pub fn account_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
-    Router::new()
+    let auth_routes = Router::new()
         .route(
-            "/{id}",
-            routing::get(get_account).route_layer(middleware::from_fn_with_state(
-                state,
-                authorization_middleware,
-            )),
+            "/",
+            routing::get(get_personal_account).delete(delete_personal_account),
         )
-        .route("/", routing::post(create_account).get(get_my_account))
+        .route(
+            "/username",
+            routing::patch(update_personal_account_username),
+        )
+        .route(
+            "/password",
+            routing::patch(update_personal_account_password),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            state,
+            authorization_middleware,
+        ));
+
+    Router::new()
+        .route("/shallow/{id}", routing::get(get_account))
+        .route("/", routing::post(create_account))
+        .merge(auth_routes)
 }
