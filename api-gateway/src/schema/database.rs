@@ -13,6 +13,14 @@ pub struct UserDTO {
 }
 
 #[derive(serde::Serialize)]
+pub struct ShallowUserDTO {
+    pub id: Uuid,
+    pub username: String,
+    pub at_room: Option<String>,
+    pub at_server: Option<String>,
+}
+
+#[derive(serde::Serialize)]
 pub struct UserBalanceDTO {
     pub id: Uuid,
     pub user_id: Uuid,
